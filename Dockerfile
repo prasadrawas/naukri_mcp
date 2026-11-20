@@ -10,7 +10,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 # Install runtime dependencies directly
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir "mcp>=1.0.0" "uvicorn>=0.30.0" "starlette>=0.38.0" "pydantic>=2.0.0" "httpx2>=2.16.0"
+    pip install --no-cache-dir "mcp>=1.0.0" "uvicorn>=0.30.0" "starlette>=0.38.0" "pydantic>=2.0.0" "httpx2>=2.16.0" "pypdf>=4.0.0"
 
 # Copy source repository into /app/naukri_mcp
 COPY . /app/naukri_mcp/

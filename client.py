@@ -21,6 +21,7 @@ CENTRAL_ENTITY_URL = "https://www.naukri.com/servicegateway-central-services/cen
 
 RESUME_VALIDATE_URL = "https://filevalidation.naukri.com/file"
 ADV_RESUME_URL_TMPL = "https://www.naukri.com/cloudgateway-mynaukri/resman-aggregator-services/v0/users/self/profiles/{profile_id}/advResume"
+RESUME_DOWNLOAD_URL_TMPL = "https://www.naukri.com/cloudgateway-mynaukri/resman-aggregator-services/v1/users/self/profiles/{profile_id}/resume"
 RESUME_FORM_KEY = "F51f8e7e54e205"
 RESUME_FILE_KEY = "UUJbZ0Fi7JjgMr"
 

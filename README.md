@@ -1,6 +1,6 @@
 # naukri-mcp: Model Context Protocol (MCP) Server for Naukri.com
 
-Production **Model Context Protocol (MCP)** Server providing **63 specialized tools**, resources, and prompts for **Naukri.com**. Designed to be deployed with zero required environment variables and connected seamlessly to modern AI assistants including **Claude Web**, **Google Gemini**, **Claude Desktop**, **Cursor**, and **Antigravity**.
+Production **Model Context Protocol (MCP)** Server providing **64 specialized tools**, resources, and prompts for **Naukri.com**. Designed to be deployed with zero required environment variables and connected seamlessly to modern AI assistants including **Claude Web**, **Google Gemini**, **Claude Desktop**, **Cursor**, and **Antigravity**.
 
 ---
 
@@ -11,7 +11,7 @@ Production **Model Context Protocol (MCP)** Server providing **63 specialized to
 - **Zero-Config Multi-Tenant Deployment:** Deploy on Railway, Render, Fly.io, or any container host with **zero environment variables required**.
 - **Personalized URL Query Parameter Connection:** Each user passes their credentials dynamically via URL query parameters (`https://<domain>/mcp?rt=YOUR_NAUK_RT_COOKIE`) or custom HTTP headers (`X-Naukri-RT`, etc.).
 - **Smart Session Caching:** Access tokens (`nauk_at`) and session credentials are bound to each client's session and cached in memory. The assistant **never repeatedly asks for tokens** across turns or chats, only prompting if the token is missing or has actually expired on Naukri.
-- **63 Comprehensive Tools:** Complete CloudGateway API coverage across profile management, IT skills, 18+ projects, accomplishments, recruiter communications, analytics, and job applications.
+- **64 Comprehensive Tools:** Complete CloudGateway API coverage across profile management, IT skills, 18+ projects, accomplishments, recruiter communications, analytics, and job applications.
 
 ---
 
@@ -140,7 +140,7 @@ Add to `claude_desktop_config.json`:
 
 ---
 
-## 🛠️ Available MCP Tools (63 Total)
+## 🛠️ Available MCP Tools (64 Total)
 
 ### Profile & Positioning Tools
 - `get_profile`: Query live sections (`headline`, `summary`, `skills`, `notice`, `career`, `itskills`, `projects`, `educations`, `employments`, `languages`, `personal`, or `all`).
@@ -175,9 +175,10 @@ Add to `claude_desktop_config.json`:
 - `update_accomplishments`: Multi-section synchronizer for all accomplishment categories.
 
 ### Resumes & Photos
+- `download_resume`: Download and read candidate's active PDF resume from Naukri, extracting plain text content and metadata directly into chat.
 - `upload_resume`: Upload PDF resume from local path, download URL, or base64.
-- `upload_photo`: Upload candidate profile photo (JPEG/PNG).
 - `delete_resume`: Remove uploaded resume from profile.
+- `upload_photo`: Upload candidate profile photo (JPEG/PNG).
 - `delete_photo`: Remove candidate profile photo.
 
 ### Job Search & Applications

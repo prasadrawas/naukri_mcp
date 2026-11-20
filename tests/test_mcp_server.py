@@ -191,6 +191,7 @@ class TestNaukriMCPServer(unittest.TestCase):
 
     def test_new_tools_exist(self):
         from naukri_mcp.server import (
+            download_resume,
             update_personal_details,
             update_it_skills,
             add_it_skill,
@@ -205,6 +206,7 @@ class TestNaukriMCPServer(unittest.TestCase):
             delete_photo,
             resend_email_verification
         )
+        self.assertTrue(callable(download_resume))
         self.assertTrue(callable(update_personal_details))
         self.assertTrue(callable(update_it_skills))
         self.assertTrue(callable(add_it_skill))

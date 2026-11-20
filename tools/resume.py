@@ -2,8 +2,11 @@
 Resume upload and validation tool for naukri_mcp.
 Supports local file path, remote HTTP URL, or base64 PDF strings.
 """
+import io
 import time
 import json
+import base64
+from pathlib import Path
 import urllib.request
 import urllib.error
 from typing import Dict, Any, Optional, Union
@@ -12,13 +15,15 @@ from naukri_mcp.auth import resolve_auth_tokens
 from naukri_mcp.client import (
     RESUME_VALIDATE_URL,
     ADV_RESUME_URL_TMPL,
+    RESUME_DOWNLOAD_URL_TMPL,
+    PROFILE_AGGREGATOR_URL,
     RESUME_FORM_KEY,
     RESUME_FILE_KEY,
     DEFAULT_USER_AGENT,
     get_headers,
     make_api_request
 )
-from naukri_mcp.tools.profile import get_profile
+from naukri_mcp.tools.profile import get_profile, extract_profile_id
 from naukri_mcp.utils import resolve_pdf_source
 
 
@@ -116,3 +121,109 @@ def upload_resume(
         "message": "Failed to attach validated resume to profile.",
         "details": resp_data
     }
+
+
+def download_resume(
+    output_path: Optional[str] = None,
+    extract_text: bool = True,
+    include_base64: bool = False,
+    nauk_at: Optional[str] = None,
+    nauk_rt: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Download and read the candidate's active PDF resume from Naukri.com.
+    Returns the resume metadata, extracted full text content, and optionally saves the PDF to disk.
+
+    :param output_path: Optional local filesystem path to write the downloaded PDF file.
+    :param extract_text: Whether to extract and return plain text content from the PDF (default: True).
+    :param include_base64: Whether to include base64-encoded PDF bytes in the response (default: False).
+    :param nauk_at: Optional bearer access token (falls back to session or NAUK_AT).
+    :param nauk_rt: Optional refresh token.
+    """
+    at, rt = resolve_auth_tokens(nauk_at, nauk_rt)
+    headers = get_headers(at, rt, app_id="105", system_id="Naukri")
+
+    # Step 1: Fetch profile to get profile ID and cvInfo metadata
+    status, prof_data = make_api_request(PROFILE_AGGREGATOR_URL, method="GET", headers=headers)
+    if status != 200 or not isinstance(prof_data, dict):
+        return {"status": "error", "http_status": status, "message": f"Could not retrieve candidate profile: {prof_data}"}
+
+    pid = extract_profile_id(prof_data)
+    if not pid:
+        return {"status": "error", "message": "Could not determine candidate profile ID."}
+
+    p0 = prof_data.get("profile", [{}])[0] if prof_data.get("profile") else {}
+    cv_info = p0.get("cvInfo", {})
+    file_name = cv_info.get("fileName", "Resume")
+    cv_format = cv_info.get("cvFormat", "pdf")
+    full_filename = f"{file_name}.{cv_format}" if not file_name.endswith(f".{cv_format}") else file_name
+
+    user = prof_data.get("user", {})
+    username = user.get("userName", "") or user.get("email", "")
+    dl_headers = dict(headers)
+    if username:
+        dl_headers["au-username"] = username
+
+    # Step 2: Download raw resume bytes from Naukri CloudGateway
+    dl_url = RESUME_DOWNLOAD_URL_TMPL.format(profile_id=pid)
+    req = urllib.request.Request(dl_url, headers=dl_headers, method="GET")
+
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            pdf_bytes = resp.read()
+    except urllib.error.HTTPError as e:
+        err_msg = e.read().decode("utf-8", errors="ignore")
+        return {
+            "status": "error",
+            "http_status": e.code,
+            "message": f"Failed to download resume from Naukri API: {e.reason}",
+            "details": err_msg
+        }
+    except Exception as e:
+        return {"status": "error", "message": f"Network error downloading resume: {e}"}
+
+    if not pdf_bytes:
+        return {"status": "error", "message": "Received empty resume file from Naukri."}
+
+    # Step 3: Extract text if requested
+    extracted_text = ""
+    num_pages = 0
+    if extract_text:
+        try:
+            import pypdf
+            reader = pypdf.PdfReader(io.BytesIO(pdf_bytes))
+            num_pages = len(reader.pages)
+            extracted_text = "\n\n".join(page.extract_text() or "" for page in reader.pages).strip()
+        except ImportError:
+            extracted_text = "[pypdf not installed: install pypdf to enable text extraction]"
+        except Exception as e:
+            extracted_text = f"[Text extraction error: {e}]"
+
+    # Step 4: Save to file if output_path is provided
+    saved_path = None
+    if output_path:
+        try:
+            p = Path(output_path).expanduser().resolve()
+            p.parent.mkdir(parents=True, exist_ok=True)
+            p.write_bytes(pdf_bytes)
+            saved_path = str(p)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Downloaded PDF successfully but failed to write to '{output_path}': {e}"
+            }
+
+    response: Dict[str, Any] = {
+        "status": "success",
+        "file_name": full_filename,
+        "file_size_bytes": len(pdf_bytes),
+        "num_pages": num_pages,
+        "text": extracted_text,
+        "cv_info": cv_info
+    }
+    if saved_path:
+        response["saved_to"] = saved_path
+    if include_base64:
+        response["pdf_base64"] = base64.b64encode(pdf_bytes).decode("ascii")
+
+    return response

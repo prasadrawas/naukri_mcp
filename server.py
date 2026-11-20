@@ -831,6 +831,34 @@ def upload_resume(
 
 
 @mcp.tool()
+def download_resume(
+    output_path: Optional[str] = None,
+    extract_text: bool = True,
+    include_base64: bool = False,
+    nauk_at: Optional[str] = None,
+    nauk_rt: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Download and read the candidate's active PDF resume from Naukri.com.
+    Returns the resume metadata (file name, size, upload date) and the extracted full text of the resume so AI assistants can inspect its contents.
+    Optionally saves the PDF to a local file path.
+
+    :param output_path: Optional local filesystem path to write the downloaded PDF file (e.g. 'resumes/resume.pdf').
+    :param extract_text: Whether to extract and return plain text content from the PDF (default: True).
+    :param include_base64: Whether to include base64-encoded PDF bytes in the response (default: False).
+    :param nauk_at: Optional bearer token.
+    :param nauk_rt: Optional refresh token.
+    """
+    return resume.download_resume(
+        output_path=output_path,
+        extract_text=extract_text,
+        include_base64=include_base64,
+        nauk_at=nauk_at,
+        nauk_rt=nauk_rt
+    )
+
+
+@mcp.tool()
 def upload_photo(
     source: Optional[str] = None,
     nauk_at: Optional[str] = None,
