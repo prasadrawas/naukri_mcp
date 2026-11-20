@@ -8,22 +8,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install build and package dependencies
-COPY pyproject.toml README.md /app/
+# Install runtime dependencies directly
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir "mcp>=1.0.0" "uvicorn>=0.30.0" "starlette>=0.38.0" "pydantic>=2.0.0" "httpx2>=2.16.0"
 
-# Copy source code of standalone naukri_mcp repository
-COPY . /app/
+# Copy source repository into /app/naukri_mcp
+COPY . /app/naukri_mcp/
 
-# Install local package in editable mode
-RUN pip install --no-cache-dir -e .
-
-# Expose standard port for SSE mode (Railway / Cloud dynamically assign $PORT)
-EXPOSE 8000
-
+# Set PYTHONPATH so python -m naukri_mcp resolves /app/naukri_mcp cleanly without editable install
+ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 ENV PORT=8000
+
+# Expose standard port for SSE mode (Railway dynamically maps $PORT)
+EXPOSE 8000
 
 # Health check probe against /health
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
