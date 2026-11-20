@@ -51,6 +51,26 @@ class TestMultiTenantSSE(unittest.TestCase):
         self.assertIn("Naukri MCP Server", resp.text)
         self.assertIn("Connect to Claude Web", resp.text)
 
+    def test_cors_preflight(self):
+        """Verify OPTIONS requests return 200 with CORS headers for Claude Web."""
+        client = TestClient(app)
+        resp = client.options(
+            "/sse",
+            headers={
+                "Origin": "https://claude.ai",
+                "Access-Control-Request-Method": "GET"
+            }
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.headers.get("access-control-allow-origin"), "*")
+
+    def test_root_redirect_with_query_params(self):
+        """Verify root URL with rt query parameter redirects to /sse."""
+        client = TestClient(app)
+        resp = client.get("/?rt=dummy_token_123", follow_redirects=False)
+        self.assertEqual(resp.status_code, 307)
+        self.assertEqual(resp.headers.get("location"), "/sse?rt=dummy_token_123")
+
     def test_stale_session_cleanup(self):
         """Verify old inactive sessions are purged from memory."""
         now = time.time()

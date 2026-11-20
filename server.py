@@ -44,9 +44,20 @@ async def health_check(request: Request) -> Response:
     })
 
 
-@mcp.custom_route("/", methods=["GET"])
+@mcp.custom_route("/", methods=["GET", "POST", "OPTIONS", "HEAD"])
 async def index_route(request: Request) -> Response:
-    """Root info page explaining how to connect Claude, Cursor, or any MCP client."""
+    """Root info page or transparent redirect to /sse when called with token or SSE headers."""
+    if request.method == "OPTIONS":
+        return Response(status_code=200)
+
+    # If request contains token query parameter or requests SSE stream, redirect to /sse
+    if "rt" in request.query_params or "nauk_rt" in request.query_params or "text/event-stream" in request.headers.get("accept", ""):
+        from starlette.responses import RedirectResponse
+        target_url = "/sse"
+        if request.scope.get("query_string"):
+            target_url += "?" + request.scope["query_string"].decode("utf-8")
+        return RedirectResponse(url=target_url, status_code=307)
+
     host = request.headers.get("host", "localhost:8000")
     scheme = "https" if request.headers.get("x-forwarded-proto") == "https" else "http"
     base_url = f"{scheme}://{host}"
@@ -1689,8 +1700,21 @@ class MultiTenantSessionMiddleware:
 
 
 def get_app() -> Any:
-    """Return the ASGI Starlette app wrapped with MultiTenantSessionMiddleware."""
-    return MultiTenantSessionMiddleware(mcp.sse_app())
+    """Return the ASGI Starlette app wrapped with MultiTenantSessionMiddleware and CORSMiddleware."""
+    from starlette.middleware.cors import CORSMiddleware
+    from mcp.server.transport_security import TransportSecuritySettings
+
+    raw_sse_app = mcp.sse_app(
+        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    )
+    wrapped_session_app = MultiTenantSessionMiddleware(raw_sse_app)
+    return CORSMiddleware(
+        wrapped_session_app,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
+        expose_headers=["*"],
+    )
 
 
 app = get_app()
