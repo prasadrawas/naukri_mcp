@@ -1,14 +1,15 @@
 # naukri-mcp: Model Context Protocol (MCP) Server for Naukri.com
 
-Production **Model Context Protocol (MCP)** Server providing **63 specialized tools**, resources, and prompts for **Naukri.com**. Designed to be deployed with zero required environment variables and connected to AI assistants such as **Claude Web**, **Claude Desktop**, **Cursor**, and **Antigravity**.
+Production **Model Context Protocol (MCP)** Server providing **63 specialized tools**, resources, and prompts for **Naukri.com**. Designed to be deployed with zero required environment variables and connected seamlessly to modern AI assistants including **Claude Web**, **Google Gemini**, **Claude Desktop**, **Cursor**, and **Antigravity**.
 
 ---
 
 ## 🌟 Key Architecture Highlights
 
-- **Standalone & Portable Repository:** Self-contained with zero hardcoded paths and no dependency on external candidate files or data folders.
+- **Standalone & Portable Repository:** Completely self-contained with zero hardcoded paths and no dependency on local candidate files.
+- **Dual Transport Support (Streamable HTTP & SSE):** Supports both the modern **Streamable HTTP** specification (`/mcp` and `/sse` via `POST`) and legacy **HTTP+SSE** (`/sse` via `GET`), with full cross-origin CORS support.
 - **Zero-Config Multi-Tenant Deployment:** Deploy on Railway, Render, Fly.io, or any container host with **zero environment variables required**.
-- **Personalized SSE URL Connection:** Each user passes their credentials dynamically via URL query parameters (`https://<domain>/sse?rt=YOUR_NAUK_RT_COOKIE`) or custom HTTP headers (`X-Naukri-RT`, etc.).
+- **Personalized URL Query Parameter Connection:** Each user passes their credentials dynamically via URL query parameters (`https://<domain>/mcp?rt=YOUR_NAUK_RT_COOKIE`) or custom HTTP headers (`X-Naukri-RT`, etc.).
 - **Smart Session Caching:** Access tokens (`nauk_at`) and session credentials are bound to each client's session and cached in memory. The assistant **never repeatedly asks for tokens** across turns or chats, only prompting if the token is missing or has actually expired on Naukri.
 - **63 Comprehensive Tools:** Complete CloudGateway API coverage across profile management, IT skills, 18+ projects, accomplishments, recruiter communications, analytics, and job applications.
 
@@ -19,11 +20,11 @@ Production **Model Context Protocol (MCP)** Server providing **63 specialized to
 Anyone can fork or clone this repository and deploy it immediately without configuring secrets or environment variables during deployment.
 
 ### Quick Railway Deployment:
-1. Push this repository to your GitHub account.
+1. Fork or push this repository to your GitHub account.
 2. In [Railway](https://railway.app), click **New Project** &rarr; **Deploy from GitHub repo**.
-3. Select this repository. Railway automatically detects the `Dockerfile`.
-4. Deploy! Railway assigns a public domain (e.g. `https://naukri-mcp-production.up.railway.app`) and dynamically provides the `$PORT` environment variable.
-5. Done! Visit your Railway URL in the browser to view the interactive server landing page and `/health` probe.
+3. Select `naukri_mcp`. Railway automatically detects the `Dockerfile`.
+4. Deploy! Railway assigns a public HTTPS domain (e.g. `https://naukrimcp-production.up.railway.app`) and dynamically provides the `$PORT` environment variable.
+5. Visit your Railway URL in the browser to view the interactive server landing page and `/health` probe.
 
 ### Run with Docker Locally:
 ```bash
@@ -35,15 +36,49 @@ docker run -p 8000:8000 naukri-mcp
 
 ## 🔌 Connecting to AI Clients
 
-### 1. Claude Web & Claude Desktop (SSE Remote Mode)
+### 1. Claude AI Web (Custom Connectors)
 
-Add this server to your Claude MCP configuration (e.g. `claude_desktop_config.json` or Claude Web Connectors):
+Claude Web supports remote MCP servers directly via Custom Connectors:
+
+1. In **Claude AI**, go to **Settings** &rarr; **Connectors** (or open the chat tools menu and click **Add custom connector**).
+2. Fill in the fields:
+   - **Name:** `Naukri MCP` (or your preferred name)
+   - **URL:** Use the Streamable HTTP endpoint with your `rt` token:
+     ```text
+     https://<YOUR-RAILWAY-APP>.up.railway.app/mcp?rt=YOUR_NAUK_RT_COOKIE
+     ```
+     *(Note: `/sse?rt=...` is also supported)*
+3. When prompted with *"Couldn't determine how this server signs in"*, click **Continue anyway**.
+4. Under **Authentication**, select **No sign-in** *(because your token is already authenticated via the URL parameter)*.
+5. Click **Add**. All 63 tools will be registered immediately!
+
+---
+
+### 2. Google Gemini & Antigravity
+
+Add `naukri-mcp` to your MCP configuration (e.g. `mcp_config.json` or `settings.json`):
 
 ```json
 {
   "mcpServers": {
     "naukri": {
-      "url": "https://your-railway-app.up.railway.app/sse?rt=YOUR_NAUK_RT_COOKIE"
+      "url": "https://<YOUR-RAILWAY-APP>.up.railway.app/mcp?rt=YOUR_NAUK_RT_COOKIE"
+    }
+  }
+}
+```
+
+---
+
+### 3. Claude Desktop & Cursor (Remote Mode)
+
+Add to `claude_desktop_config.json` or `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "naukri": {
+      "url": "https://<YOUR-RAILWAY-APP>.up.railway.app/sse?rt=YOUR_NAUK_RT_COOKIE"
     }
   }
 }
@@ -76,12 +111,12 @@ If your MCP client supports custom headers:
 
 ---
 
-### 2. Local stdio Mode (Claude Desktop / CLI)
+### 4. Local stdio Mode (Single Developer / CLI)
 
-For local development or single-user desktop setups:
+For local development without Docker:
 
 ```bash
-git clone https://github.com/your-username/naukri_mcp.git
+git clone https://github.com/prasadrawas/naukri_mcp.git
 cd naukri_mcp
 python3 -m venv .venv
 source .venv/bin/activate
