@@ -1603,40 +1603,57 @@ def handle_job_application(job_id_or_url: str) -> str:
 class SessionContextMiddleware:
     """
     MCP Server middleware intercepting incoming JSON-RPC calls (tools/call, prompts/get, resources/read).
-    Resolves session_id from query parameters, retrieves that session's credentials
+    Resolves session_id from query parameters or headers, retrieves that session's credentials
     from SESSION_STORE, and injects them into contextvars.
     """
     async def __call__(self, ctx: Any, call_next: Any) -> Any:
         req = getattr(ctx, "request", None)
-        if req and hasattr(req, "query_params"):
-            sess_id = req.query_params.get("session_id", "").replace("-", "")
+        if req:
+            from naukri_mcp.auth import (
+                current_session_id,
+                current_session_rt,
+                current_session_resume_url,
+                current_session_pdf_url,
+                SESSION_STORE
+            )
+
+            # Direct extraction from query params
+            if hasattr(req, "query_params"):
+                q_rt = req.query_params.get("rt", "") or req.query_params.get("nauk_rt", "")
+                if q_rt:
+                    current_session_rt.set(q_rt)
+                q_res = req.query_params.get("resume", "") or req.query_params.get("resume_url", "")
+                if q_res:
+                    current_session_resume_url.set(q_res)
+                q_pdf = req.query_params.get("pdf", "") or req.query_params.get("pdf_url", "")
+                if q_pdf:
+                    current_session_pdf_url.set(q_pdf)
+
+            sess_id = ""
+            if hasattr(req, "query_params"):
+                sess_id = req.query_params.get("session_id", "").replace("-", "")
+            if not sess_id and hasattr(req, "headers"):
+                sess_id = req.headers.get("mcp-session-id", "").replace("-", "")
+
             if sess_id:
-                from naukri_mcp.auth import (
-                    current_session_id,
-                    current_session_rt,
-                    current_session_resume_url,
-                    current_session_pdf_url,
-                    SESSION_STORE
-                )
                 current_session_id.set(sess_id)
                 sess_data = SESSION_STORE.get(sess_id)
                 if sess_data:
-                    if sess_data.get("rt"):
+                    if sess_data.get("rt") and not current_session_rt.get():
                         current_session_rt.set(sess_data["rt"])
-                    if sess_data.get("resume_url"):
+                    if sess_data.get("resume_url") and not current_session_resume_url.get():
                         current_session_resume_url.set(sess_data["resume_url"])
-                    if sess_data.get("pdf_url"):
+                    if sess_data.get("pdf_url") and not current_session_pdf_url.get():
                         current_session_pdf_url.set(sess_data["pdf_url"])
                     sess_data["last_seen"] = time.time()
 
-        if req and hasattr(req, "headers"):
-            h_rt = req.headers.get("x-naukri-rt", "")
-            if h_rt:
-                from naukri_mcp.auth import current_session_rt, SESSION_STORE, current_session_id
-                current_session_rt.set(h_rt)
-                sid = current_session_id.get()
-                if sid:
-                    SESSION_STORE.setdefault(sid, {})["rt"] = h_rt
+            if hasattr(req, "headers"):
+                h_rt = req.headers.get("x-naukri-rt", "")
+                if h_rt:
+                    current_session_rt.set(h_rt)
+                    sid = current_session_id.get()
+                    if sid:
+                        SESSION_STORE.setdefault(sid, {})["rt"] = h_rt
 
         return await call_next(ctx)
 
@@ -1647,17 +1664,14 @@ mcp._lowlevel_server.middleware.append(SessionContextMiddleware())
 class MultiTenantSessionMiddleware:
     """
     ASGI middleware intercepting incoming SSE connections and client requests:
-    1. Intercepts `GET /sse`:
-       - Extracts `rt`, `resume`, `pdf` from query parameters and headers.
-       - Intercepts outgoing SSE stream to capture `session_id`.
-       - Binds `session_id` -> credentials in `SESSION_STORE`.
-    2. Passes all other requests through transparently.
+    Extracts rt, resume, pdf from query parameters and headers.
+    Captures session IDs from response bodies and headers to bind credentials in SESSION_STORE.
     """
     def __init__(self, app_target: Any) -> None:
         self.app_target = app_target
 
     async def __call__(self, scope: Dict[str, Any], receive: Any, send: Any) -> None:
-        if scope.get("type") == "http" and scope.get("path") == "/sse":
+        if scope.get("type") == "http":
             import urllib.parse
             import re
             from naukri_mcp.auth import SESSION_STORE, clean_stale_sessions
@@ -1677,10 +1691,29 @@ class MultiTenantSessionMiddleware:
             if not pdf_url:
                 pdf_url = headers.get("x-resume-pdf", "")
 
+            # If incoming request carries session id, update session store
+            req_sess_id = headers.get("mcp-session-id", "") or qs.get("session_id", [""])[0]
+            if req_sess_id and rt:
+                req_sess_id = req_sess_id.replace("-", "")
+                sess = SESSION_STORE.setdefault(req_sess_id, {})
+                sess["rt"] = rt
+                sess["last_seen"] = time.time()
+
             async def custom_send(message: Dict[str, Any]) -> None:
-                if message.get("type") == "http.response.body":
+                if message.get("type") == "http.response.start":
+                    resp_headers = {k.decode("latin1").lower(): v.decode("latin1") for k, v in message.get("headers", [])}
+                    sess_id = resp_headers.get("mcp-session-id", "").replace("-", "")
+                    if sess_id and rt:
+                        SESSION_STORE[sess_id] = {
+                            "rt": rt,
+                            "resume_url": resume_url,
+                            "pdf_url": pdf_url,
+                            "created_at": time.time(),
+                            "last_seen": time.time()
+                        }
+                elif message.get("type") == "http.response.body":
                     body_bytes = message.get("body", b"")
-                    if b"session_id=" in body_bytes:
+                    if b"session_id=" in body_bytes and rt:
                         m = re.search(r"session_id=([a-f0-9\-]+)", body_bytes.decode("utf-8", errors="ignore"))
                         if m:
                             sess_id = m.group(1).replace("-", "")
@@ -1700,14 +1733,42 @@ class MultiTenantSessionMiddleware:
 
 
 def get_app() -> Any:
-    """Return the ASGI Starlette app wrapped with MultiTenantSessionMiddleware and CORSMiddleware."""
+    """Return unified Starlette app supporting both Streamable HTTP (/mcp) and SSE (/sse), with CORS."""
+    from starlette.applications import Starlette
     from starlette.middleware.cors import CORSMiddleware
+    from starlette.routing import Route
     from mcp.server.transport_security import TransportSecuritySettings
 
-    raw_sse_app = mcp.sse_app(
-        transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    sec = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+    sse_subapp = mcp.sse_app(transport_security=sec)
+    http_subapp = mcp.streamable_http_app(streamable_http_path="/mcp", transport_security=sec)
+
+    http_handler = None
+    for r in http_subapp.routes:
+        if getattr(r, "path", "") == "/mcp":
+            http_handler = r.endpoint
+            break
+
+    sse_handler = None
+    for r in sse_subapp.routes:
+        if getattr(r, "path", "") == "/sse":
+            sse_handler = r.endpoint
+            break
+
+    routes = [
+        Route("/sse", endpoint=sse_handler, methods=["GET", "HEAD"]),
+        Route("/sse", endpoint=http_handler, methods=["POST"]),
+        Route("/mcp", endpoint=http_handler, methods=["GET", "POST", "HEAD"]),
+        Route("/", endpoint=http_handler, methods=["POST"]),
+        *[r for r in sse_subapp.routes if getattr(r, "path", "") not in ("/sse", "/mcp")],
+    ]
+
+    unified_app = Starlette(
+        routes=routes,
+        lifespan=http_subapp.router.lifespan_context
     )
-    wrapped_session_app = MultiTenantSessionMiddleware(raw_sse_app)
+
+    wrapped_session_app = MultiTenantSessionMiddleware(unified_app)
     return CORSMiddleware(
         wrapped_session_app,
         allow_origins=["*"],

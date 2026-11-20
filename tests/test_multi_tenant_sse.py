@@ -64,6 +64,41 @@ class TestMultiTenantSSE(unittest.TestCase):
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.headers.get("access-control-allow-origin"), "*")
 
+    def test_streamable_http_post_on_sse_and_mcp(self):
+        """Verify POST requests to /sse and /mcp succeed without 405 Method Not Allowed."""
+        with TestClient(get_app()) as client:
+            # POST /sse
+            resp_sse = client.post(
+                "/sse?rt=test_rt_val",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 1,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "claude", "version": "1.0"}
+                    }
+                }
+            )
+            self.assertEqual(resp_sse.status_code, 200)
+
+            # POST /mcp
+            resp_mcp = client.post(
+                "/mcp?rt=test_rt_val",
+                json={
+                    "jsonrpc": "2.0",
+                    "id": 2,
+                    "method": "initialize",
+                    "params": {
+                        "protocolVersion": "2024-11-05",
+                        "capabilities": {},
+                        "clientInfo": {"name": "claude", "version": "1.0"}
+                    }
+                }
+            )
+            self.assertEqual(resp_mcp.status_code, 200)
+
     def test_root_redirect_with_query_params(self):
         """Verify root URL with rt query parameter redirects to /sse."""
         client = TestClient(app)
