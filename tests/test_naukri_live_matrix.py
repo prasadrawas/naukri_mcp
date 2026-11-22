@@ -2,8 +2,6 @@
 Live matrix test for all 6 tools and their parameter variations in naukri_mcp.
 """
 import sys
-import os
-import json
 from pathlib import Path
 
 # Ensure paths

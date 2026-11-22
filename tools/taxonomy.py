@@ -2,7 +2,7 @@
 Central taxonomy and standardized entity search tools for naukri_mcp.
 """
 import urllib.parse
-from typing import Dict, Any, List, Optional
+from typing import Dict, Any, Optional
 
 from naukri_mcp.auth import resolve_auth_tokens
 from naukri_mcp.client import CENTRAL_ENTITY_URL, get_headers, make_api_request

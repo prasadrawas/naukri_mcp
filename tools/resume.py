@@ -9,7 +9,7 @@ import base64
 from pathlib import Path
 import urllib.request
 import urllib.error
-from typing import Dict, Any, Optional, Union
+from typing import Dict, Any, Optional
 
 from naukri_mcp.auth import resolve_auth_tokens
 from naukri_mcp.client import (

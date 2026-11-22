@@ -13,14 +13,11 @@ from mcp.client.session import ClientSession
 from mcp.client.sse import sse_client
 import uvicorn
 
-from naukri_mcp.server import mcp, get_app, app
+from naukri_mcp.server import get_app, app
 from naukri_mcp.auth import (
     SESSION_STORE,
     TOKEN_CACHE,
-    current_session_id,
     current_session_rt,
-    current_session_resume_url,
-    current_session_pdf_url,
     resolve_auth_tokens,
     clean_stale_sessions
 )

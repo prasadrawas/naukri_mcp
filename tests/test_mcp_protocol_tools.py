@@ -2,10 +2,8 @@
 End-to-end testing of the unified 6-tool architecture in naukri-mcp server
 using the official Model Context Protocol (MCP) ClientSession (tools/call).
 """
-import asyncio
 import json
 import os
-import sys
 import unittest
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters

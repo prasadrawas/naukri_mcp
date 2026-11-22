@@ -2,19 +2,14 @@
 Unit tests for naukri-mcp server tools and utilities.
 """
 import unittest
-import json
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from naukri_mcp.auth import decode_jwt_exp, resolve_auth_tokens
 from naukri_mcp.utils import resolve_json_source, resolve_pdf_source
 from naukri_mcp.serializers import (
-    normalize_title,
     build_headline_payload,
-    build_summary_payload,
-    build_key_skills_payload,
     build_notice_period_payload,
     build_application_payload
 )
@@ -97,10 +92,6 @@ class TestNaukriMCPServer(unittest.TestCase):
 
         from naukri_mcp.serializers import (
             build_online_profiles_payload,
-            build_work_samples_payload,
-            build_publications_payload,
-            build_presentations_payload,
-            build_patents_payload,
             build_certifications_payload
         )
         op = build_online_profiles_payload([{"profile": "LinkedIn", "url": "https://linkedin.com"}], "pid123")

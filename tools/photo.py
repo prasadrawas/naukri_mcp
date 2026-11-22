@@ -29,7 +29,7 @@ from naukri_mcp.tools.profile import get_profile
 def generate_default_avatar(initials: str = "PR") -> bytes:
     """Generate a clean professional 400x400 avatar JPEG using Pillow."""
     try:
-        from PIL import Image, ImageDraw, ImageFont
+        from PIL import Image, ImageDraw
         img = Image.new("RGB", (400, 400), color=(41, 128, 185))
         d = ImageDraw.Draw(img)
         # Inner circle
@@ -133,7 +133,7 @@ def upload_photo(
         req = urllib.request.Request(PHOTO_VALIDATE_URL, data=body, headers=file_headers, method="POST")
         with urllib.request.urlopen(req, timeout=25) as resp:
             val_raw = resp.read().decode("utf-8")
-            val_data = json.loads(val_raw)
+            _ = json.loads(val_raw)
     except urllib.error.HTTPError as e:
         err_msg = e.read().decode("utf-8", errors="ignore")
         return {"status": "error", "http_status": e.code, "message": f"Photo validation failed: {err_msg}"}

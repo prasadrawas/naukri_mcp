@@ -240,7 +240,7 @@ def manage_profile(
         return profile.touch_profile_pulse(nauk_at=nauk_at, nauk_rt=nauk_rt)
 
     elif action == "sync_master":
-        return profile.sync_full_profile(master_resume_source=source, nauk_at=nauk_at, nauk_rt=nauk_rt)
+        return profile.sync_full_profile(resume_source=source or "", nauk_at=nauk_at, nauk_rt=nauk_rt)
 
     elif action == "audit_duplicates":
         return duplicates.audit_profile_duplicates(nauk_at=nauk_at, nauk_rt=nauk_rt)
@@ -302,7 +302,8 @@ def manage_profile(
                 errors.append({"section": "summary", "error": res})
 
         if key_skills is not None:
-            res = profile.update_key_skills(skills=key_skills, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            skills_val = ", ".join(key_skills) if isinstance(key_skills, list) else str(key_skills)
+            res = profile.update_key_skills(skills_csv=skills_val, nauk_at=nauk_at, nauk_rt=nauk_rt)
             if res.get("status") == "success":
                 updates_performed.append("key_skills")
             else:
@@ -360,7 +361,7 @@ def manage_profile(
                 errors.append({"section": "schools", "error": res})
 
         if it_skills is not None:
-            res = profile.update_it_skills(it_skills_list=it_skills, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            res = profile.update_it_skills(skills_list=it_skills, nauk_at=nauk_at, nauk_rt=nauk_rt)
             if res.get("status") == "success":
                 updates_performed.append("it_skills")
             else:
@@ -381,7 +382,7 @@ def manage_profile(
                 errors.append({"section": "languages", "error": res})
 
         if job_search_status is not None:
-            res = profile.update_job_search_status(status=job_search_status, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            res = profile.update_job_search_status(status_code_or_name=job_search_status, nauk_at=nauk_at, nauk_rt=nauk_rt)
             if res.get("status") == "success":
                 updates_performed.append("job_search_status")
             else:
@@ -409,7 +410,7 @@ def manage_profile(
                 errors.append({"section": "career_break", "error": res})
 
         if accomplishments is not None:
-            res = profile.update_accomplishments(accomplishments_dict=accomplishments, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            res = profile.update_accomplishments(accomplishments=accomplishments, nauk_at=nauk_at, nauk_rt=nauk_rt)
             if res.get("status") == "success":
                 updates_performed.append("accomplishments")
             else:
@@ -419,11 +420,11 @@ def manage_profile(
             item_kind = add_item.get("type", "").strip().lower()
             item_data = add_item.get("data") or {k: v for k, v in add_item.items() if k != "type"}
             if item_kind in ("project", "projects"):
-                res = profile.add_project(project_dict=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
+                res = profile.add_project(project_data=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
             elif item_kind in ("it_skill", "itskill", "skill", "skills"):
-                res = profile.add_it_skill(skill_dict=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
+                res = profile.add_it_skill(**item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
             elif item_kind in ("language", "languages"):
-                res = profile.add_language(language_dict=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
+                res = profile.add_language(**item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
             else:
                 res = {"status": "error", "message": f"Unknown add_item type: '{item_kind}'"}
 

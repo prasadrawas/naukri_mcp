@@ -6,7 +6,7 @@ from typing import Dict, Any, List, Optional
 from naukri_mcp.auth import resolve_auth_tokens
 from naukri_mcp.client import delete_subresource
 from naukri_mcp.serializers import normalize_title
-from naukri_mcp.tools.profile import get_profile, extract_profile_id
+from naukri_mcp.tools.profile import get_profile
 
 
 def audit_duplicates(
