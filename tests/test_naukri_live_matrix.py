@@ -23,7 +23,7 @@ def run_tests():
     failures = []
 
     def run_case(name, func, *args, **kwargs):
-        nonlocal tests_run, tests_passed, failures
+        nonlocal tests_run, tests_passed
         tests_run += 1
         print(f"\n[{tests_run}] Testing: {name}...")
         try:
