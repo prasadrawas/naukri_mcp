@@ -18,15 +18,42 @@ from naukri_mcp.serializers import (
     build_notice_period_payload,
     build_application_payload
 )
-from naukri_mcp.server import mcp
+from naukri_mcp.server import (
+    mcp,
+    manage_profile,
+    search_jobs,
+    get_job_details,
+    apply_to_jobs,
+    manage_recruiter_interactions,
+    manage_session
+)
 
 
 class TestNaukriMCPServer(unittest.TestCase):
 
-    def test_server_metadata(self):
+    def test_server_metadata_and_6_tools(self):
         self.assertEqual(mcp.name, "naukri-mcp")
         tools = mcp._tool_manager.list_tools() if hasattr(mcp, "_tool_manager") else []
-        self.assertGreaterEqual(len(tools), 20)
+        tool_names = [t.name for t in tools]
+        self.assertEqual(len(tools), 6)
+        expected_tools = [
+            "manage_profile",
+            "search_jobs",
+            "get_job_details",
+            "apply_to_jobs",
+            "manage_recruiter_interactions",
+            "manage_session"
+        ]
+        for t in expected_tools:
+            self.assertIn(t, tool_names)
+
+    def test_tools_callable(self):
+        self.assertTrue(callable(manage_profile))
+        self.assertTrue(callable(search_jobs))
+        self.assertTrue(callable(get_job_details))
+        self.assertTrue(callable(apply_to_jobs))
+        self.assertTrue(callable(manage_recruiter_interactions))
+        self.assertTrue(callable(manage_session))
 
     def test_resolve_json_source_dict(self):
         d = {"test": 123}
@@ -83,44 +110,6 @@ class TestNaukriMCPServer(unittest.TestCase):
         cert = build_certifications_payload([{"course": "AWS Solutions Architect", "vendor": "AWS"}], "pid123")
         self.assertEqual(len(cert["certifications"]), 1)
         self.assertEqual(cert["certifications"][0]["course"], "AWS Solutions Architect")
-
-    def test_refresh_session_token_tool_exists(self):
-        from naukri_mcp.server import refresh_session_token
-        self.assertTrue(callable(refresh_session_token))
-        res = refresh_session_token(nauk_rt="")
-        self.assertIn(res.get("status"), ("success", "error"))
-
-    def test_delete_tools_exist(self):
-        from naukri_mcp.tools.delete import (
-            delete_project,
-            delete_employment,
-            delete_it_skill,
-            delete_education,
-            delete_school,
-            delete_online_profile,
-            delete_work_sample,
-            delete_publication,
-            delete_presentation,
-            delete_patent,
-            delete_certification,
-            delete_language,
-            delete_resume,
-            delete_profile_item
-        )
-        self.assertTrue(callable(delete_project))
-        self.assertTrue(callable(delete_employment))
-        self.assertTrue(callable(delete_it_skill))
-        self.assertTrue(callable(delete_education))
-        self.assertTrue(callable(delete_school))
-        self.assertTrue(callable(delete_online_profile))
-        self.assertTrue(callable(delete_work_sample))
-        self.assertTrue(callable(delete_publication))
-        self.assertTrue(callable(delete_presentation))
-        self.assertTrue(callable(delete_patent))
-        self.assertTrue(callable(delete_certification))
-        self.assertTrue(callable(delete_language))
-        self.assertTrue(callable(delete_resume))
-        self.assertTrue(callable(delete_profile_item))
 
     def test_education_serializers(self):
         from naukri_mcp.serializers import build_educations_payload, build_schools_payload
@@ -189,39 +178,6 @@ class TestNaukriMCPServer(unittest.TestCase):
         self.assertTrue(cb["extendedProfile"]["careerBreak"]["data"][0]["comingFromBreak"])
         self.assertEqual(cb["extendedProfile"]["careerBreak"]["data"][0]["reasonOfBreak"]["id"], 5)
 
-    def test_new_tools_exist(self):
-        from naukri_mcp.server import (
-            download_resume,
-            update_personal_details,
-            update_it_skills,
-            add_it_skill,
-            update_languages,
-            add_language,
-            update_job_search_status,
-            update_disability,
-            delete_disability,
-            update_work_permit,
-            update_career_break,
-            delete_career_break,
-            delete_photo,
-            resend_email_verification
-        )
-        self.assertTrue(callable(download_resume))
-        self.assertTrue(callable(update_personal_details))
-        self.assertTrue(callable(update_it_skills))
-        self.assertTrue(callable(add_it_skill))
-        self.assertTrue(callable(update_languages))
-        self.assertTrue(callable(add_language))
-        self.assertTrue(callable(update_job_search_status))
-        self.assertTrue(callable(update_disability))
-        self.assertTrue(callable(delete_disability))
-        self.assertTrue(callable(update_work_permit))
-        self.assertTrue(callable(update_career_break))
-        self.assertTrue(callable(delete_career_break))
-        self.assertTrue(callable(delete_photo))
-        self.assertTrue(callable(resend_email_verification))
-
 
 if __name__ == "__main__":
     unittest.main()
-

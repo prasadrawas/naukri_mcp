@@ -99,3 +99,9 @@ def delete_duplicates(
         "deleted_skills_count": len(deleted_skills),
         "deleted_skills": deleted_skills
     }
+
+
+# Backward compatibility aliases
+audit_profile_duplicates = audit_duplicates
+delete_profile_duplicates = delete_duplicates
+

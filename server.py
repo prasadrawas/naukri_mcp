@@ -1,12 +1,12 @@
 """
 Naukri MCP Server implementation using official FastMCP / MCPServer SDK.
-Provides Tools, Resources, and Prompts.
+Provides Tools, Resources, and Prompts in a unified, optimized 6-tool architecture.
 """
 import os
 import time
 import json
 from pathlib import Path
-from typing import Dict, Any, List, Optional, Union
+from typing import Dict, Any, List, Optional, Union, Literal
 
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse, HTMLResponse
@@ -18,14 +18,20 @@ except Exception:
 
 from naukri_mcp.tools import profile, resume, photo, duplicates, analytics, taxonomy, jobs, delete
 
-# Initialize the FastMCP server
+# Initialize the FastMCP server with unified 6-tool architecture
 mcp = FastMCP(
     "naukri-mcp",
     instructions=(
-        "Naukri MCP Server: Manage Naukri candidate profiles, upload resumes, "
-        "inspect recruiter views, search jobs, submit applications, and manage items.\n"
-        "CAUTION: Deletion permanently removes items from the live candidate profile. "
-        "AI assistants MUST exercise extreme caution and confirm user intent before invoking delete tools."
+        "Naukri MCP Server (Unified 6-Tool Architecture): Production MCP server for Naukri candidate profile "
+        "management, smart job search and applications, recruiter interactions, and session maintenance.\n\n"
+        "CORE TOOLS (Total 6 Tools):\n"
+        "1. `manage_profile`: Candidate profile inspection, section updates (headline, summary, skills, experience, "
+        "education, personal details, accomplishments), activity pulse, resume & photo management, duplicate auditing, and safe item deletions.\n"
+        "2. `search_jobs`: Search live jobs on Naukri by keyword, location, and experience, categorized by application flow.\n"
+        "3. `get_job_details`: Inspect comprehensive job descriptions, requirements, and screening questionnaires for one or more job IDs.\n"
+        "4. `apply_to_jobs`: Submit job applications for single or multiple jobs with questionnaire answers.\n"
+        "5. `manage_recruiter_interactions`: Recruiter inbox & emails, search appearance analytics, notifications, salary insights, employer blocking, and taxonomy autosuggest.\n"
+        "6. `manage_session`: Verify active session authentication or renew access token."
     )
 )
 
@@ -40,7 +46,7 @@ async def health_check(request: Request) -> Response:
     return JSONResponse({
         "status": "healthy",
         "service": "naukri-mcp",
-        "version": "1.0.0"
+        "version": "2.0.0"
     })
 
 
@@ -82,11 +88,11 @@ async def index_route(request: Request) -> Response:
 </head>
 <body>
     <span class="badge">Running</span>
-    <h1>Naukri MCP Server</h1>
-    <p>Production Model Context Protocol (MCP) server providing 63 tools for automated Naukri candidate profile management, recruiter visibility optimization, and smart job applications.</p>
+    <h1>Naukri MCP Server (Unified 6-Tool Architecture)</h1>
+    <p>Production Model Context Protocol (MCP) server providing 6 consolidated tools for automated Naukri candidate profile management, recruiter visibility optimization, and smart job applications.</p>
     
     <div class="card">
-        <h3>Connect to Claude Web / Claude Desktop / Cursor</h3>
+        <h3>Connect to Claude Web / Claude Desktop / Cursor / Gemini</h3>
         <p>Add this server to your MCP configuration with your personalized SSE URL:</p>
         <pre><code>{{
   "mcpServers": {{
@@ -102,6 +108,18 @@ async def index_route(request: Request) -> Response:
             <li><code>&amp;pdf=&lt;url&gt;</code>: (Optional) HTTP/HTTPS URL to download your PDF resume for 1-click uploads.</li>
         </ul>
         <p>Custom HTTP headers are also supported: <code>X-Naukri-RT</code>, <code>X-Master-Resume</code>, <code>X-Resume-Pdf</code>.</p>
+    </div>
+
+    <div class="card">
+        <h3>Core Tools (Unified 6-Tool Architecture):</h3>
+        <ul>
+            <li><code>manage_profile</code>: Get profile, update any section, pulse recruiter rank, sync master resume, upload/download resume & photo, audit duplicates, delete items.</li>
+            <li><code>search_jobs</code>: Search jobs by keywords, location, experience with categorization.</li>
+            <li><code>get_job_details</code>: Comprehensive job specifications and screening questionnaires (single or batch).</li>
+            <li><code>apply_to_jobs</code>: Submit job applications for single or multiple jobs with questionnaire answers.</li>
+            <li><code>manage_recruiter_interactions</code>: Analytics, inbox, notifications, salary insights, blocked employers, and taxonomy search.</li>
+            <li><code>manage_session</code>: Validate session authentication and renew access token.</li>
+        </ul>
     </div>
 
     <div class="card">
@@ -123,715 +141,48 @@ async def index_route(request: Request) -> Response:
 
 
 # ---------------------------------------------------------------------------
-# MCP TOOLS
+# MCP TOOLS (Unified 6-Tool Architecture)
 # ---------------------------------------------------------------------------
 
 @mcp.tool()
-def refresh_session_token(
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Refresh and renew the Naukri access token (NAUK_AT) using the refresh token (NAUK_RT).
-
-    :param nauk_rt: Optional refresh token string (defaults to session RT or NAUK_RT in environment).
-    """
-    from naukri_mcp.auth import (
-        refresh_token_via_nauk_rt,
-        load_env_file,
-        decode_jwt_exp,
-        current_session_rt,
-        current_session_id,
-        SESSION_STORE
-    )
-    load_env_file()
-    rt = (nauk_rt or current_session_rt.get() or os.getenv("NAUK_RT", "")).strip()
-    if not rt:
-        return {
-            "status": "error",
-            "message": (
-                "No NAUK_RT refresh token provided or found in session/environment. "
-                "Please provide your 'nauk_rt' cookie from naukri.com."
-            )
-        }
-
-    new_at, new_rt = refresh_token_via_nauk_rt(rt)
-    if new_at:
-        effective_rt = new_rt or rt
-        current_session_rt.set(effective_rt)
-        sess_id = current_session_id.get()
-        if sess_id:
-            SESSION_STORE.setdefault(sess_id, {})["rt"] = effective_rt
-        return {
-            "status": "success",
-            "message": "Naukri access token refreshed successfully.",
-            "expires_in_seconds": decode_jwt_exp(new_at) - int(time.time()),
-            "token_preview": f"{new_at[:25]}...{new_at[-15:]}"
-        }
-    return {
-        "status": "error",
-        "message": "Failed to refresh token using NAUK_RT. The cookie may be invalid or expired on Naukri."
-    }
-
-
-@mcp.tool()
-def get_profile(
+def manage_profile(
+    action: Literal[
+        "get",
+        "update",
+        "pulse",
+        "sync_master",
+        "audit_duplicates",
+        "delete_item",
+        "upload_resume",
+        "download_resume",
+        "delete_resume",
+        "upload_photo",
+        "delete_photo",
+        "resend_verification"
+    ] = "get",
     section: str = "all",
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Fetch live Naukri candidate profile data.
-
-    :param section: Section to inspect ('all', 'headline', 'summary', 'skills', 'notice', 'career', 'itskills', 'projects', 'educations', 'employments', 'languages', 'personal').
-    :param nauk_at: Optional bearer token (defaults to NAUK_AT in environment).
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.get_profile(section=section, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_headline(
-    headline: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate resume headline on Naukri.
-
-    :param headline: New headline text (e.g. 'Senior Full Stack Engineer | 5.3+ YOE | Python, FastAPI, React 19').
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_headline(headline=headline, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_summary(
-    summary: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate profile summary (automatically trimmed to max 1000 chars).
-
-    :param summary: Profile summary text.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_summary(summary=summary, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_key_skills(
-    skills_csv: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update key skills comma-separated tags on candidate profile.
-
-    :param skills_csv: Comma-separated skills (e.g. 'Python, FastAPI, Docker, PostgreSQL, React').
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_key_skills(skills_csv=skills_csv, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_notice_period(
-    days: int,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate notice period on Naukri.
-
-    :param days: Notice period in days (0 for Serving Notice, 15, 30 for 1 Month, 60 for 2 Months, 90 for 3 Months).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_notice_period(days=days, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_location(
-    city_id: int,
-    city_name: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate current location/city.
-
-    :param city_id: Standardized city ID (e.g. 139 for Pune). Use search_taxonomy to find IDs.
-    :param city_name: City name string.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_location(city_id=city_id, city_name=city_name, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_career_profile(
-    expected_ctc: int,
-    preferred_cities: List[Any],
-    target_roles: List[Any],
-    desired_job_types: Optional[List[str]] = None,
-    desired_employment_types: Optional[List[str]] = None,
-    department: Optional[Any] = None,
-    role_category: Optional[Any] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate career preferences, expected annual CTC in INR, preferred locations, target roles,
-    desired job types ('permanent', 'contractual'), and desired employment types ('Full Time', 'Part Time').
-
-    :param expected_ctc: Expected CTC in integer INR (e.g. 1200000 for 12 LPA).
-    :param preferred_cities: List of city dicts or names, e.g. [{'id': 139, 'value': 'Pune'}] or ['Pune'].
-    :param target_roles: List of target role dicts or names, e.g. [{'id': 265, 'value': 'Full Stack Developer'}].
-    :param desired_job_types: List of desired job types (e.g. ['permanent']).
-    :param desired_employment_types: List of desired employment types (e.g. ['Full Time']).
-    :param department: Optional department dict or string (e.g. {'id': 5, 'value': 'Engineering - Software & QA'}).
-    :param role_category: Optional role category dict or string (e.g. {'id': 1028, 'value': 'Software Development'}).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_career_profile(
-        expected_ctc=expected_ctc,
-        preferred_cities=preferred_cities,
-        target_roles=target_roles,
-        desired_job_types=desired_job_types,
-        desired_employment_types=desired_employment_types,
-        department=department,
-        role_category=role_category,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def update_work_experience(
-    work_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update employment / work experience history on candidate profile.
-
-    :param work_list: List of work experience dicts, each with keys like:
-                     'company', 'position', 'startDate' (YYYY-MM-DD), 'endDate', 'isCurrent' (bool),
-                     'highlights' (list of achievements), 'technologies' (list of skills).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_work_experience(work_list=work_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_projects(
-    projects_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update or create multiple projects on candidate profile.
-
-    :param projects_list: List of project dicts ('projectTitle', 'clientName', 'projectDetails', 'role', 'teamSize', 'skills', 'startDate', 'endDate').
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_projects(projects_list=projects_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def add_project(
-    project_data: Dict[str, Any],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Add a single project to candidate profile.
-
-    :param project_data: Project dict with keys: 'projectTitle', 'clientName', 'projectDetails', 'role', 'teamSize', 'skills', 'startDate', 'endDate'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.add_project(project_data=project_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_educations(
-    educations_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update higher education entries (Graduation, Masters/Post-Graduation, Doctorate/PhD).
-
-    :param educations_list: List of education dicts with 'educationType' ('UG', 'PG', 'PPG'), 'course', 'specialisation', 'entityInstitute', 'yearOfStart', 'yearOfCompletion'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_educations(educations_list=educations_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_schools(
-    schools_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update school education entries (Class X, Class XII).
-
-    :param schools_list: List of school dicts with 'educationType' ('Class X', 'Class XII'), 'schoolBoard', 'schoolCompletionYear', 'schoolMedium', 'schoolPercentage'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_schools(schools_list=schools_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_personal_details(
-    gender: Optional[str] = None,
-    marital_status: Optional[str] = None,
-    birth_date: Optional[str] = None,
-    category: Optional[str] = None,
-    address: Optional[str] = None,
-    hometown: Optional[str] = None,
-    pincode: Optional[str] = None,
-    mail_city: Optional[str] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate personal details (Gender, Marital status, DOB, Category, Address, Hometown, Pincode).
-
-    :param gender: 'Male', 'Female', 'Transgender' (or 'M', 'F', 'T').
-    :param marital_status: 'Single / unmarried', 'Married'.
-    :param birth_date: Date of birth (YYYY-MM-DD).
-    :param category: Caste/Category ('General', 'OBC', 'SC', 'ST').
-    :param address: Full street/contact address.
-    :param hometown: Hometown city name.
-    :param pincode: Postal code (e.g. '411045').
-    :param mail_city: Mail city and state (e.g. 'pune, maharashtra').
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_personal_details(
-        gender=gender,
-        marital_status=marital_status,
-        birth_date=birth_date,
-        category=category,
-        address=address,
-        hometown=hometown,
-        pincode=pincode,
-        mail_city=mail_city,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def update_it_skills(
-    skills_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update or add structured entries in candidate IT skills table with version, last used year, and experience.
-
-    :param skills_list: List of dicts with 'skill'/'name', 'version', 'last_used_year', 'exp_years', 'exp_months'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_it_skills(skills_list=skills_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def add_it_skill(
-    skill: str,
-    version: str = "Latest",
-    last_used_year: int = 2026,
-    experience_years: int = 2,
-    experience_months: int = 0,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Add or update a single IT skill entry in candidate IT skills table.
-
-    :param skill: Name of skill (e.g. 'Python', 'FastAPI', 'Docker').
-    :param version: Version label (e.g. '3.12', 'v26', 'Cloud').
-    :param last_used_year: Year last used (e.g. 2026).
-    :param experience_years: Total years of experience with the skill.
-    :param experience_months: Total months of experience with the skill.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.add_it_skill(
-        skill=skill,
-        version=version,
-        last_used_year=last_used_year,
-        experience_years=experience_years,
-        experience_months=experience_months,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def update_languages(
-    languages_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update or add candidate languages with proficiency and abilities (read, write, speak).
-
-    :param languages_list: List of dicts with 'lang'/'language', 'proficiency' ('Beginner'/'Proficient'/'Expert'), and 'ability' list or 'read', 'write', 'speak' booleans.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_languages(languages_list=languages_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def add_language(
-    language: str,
-    proficiency: str = "Proficient",
-    read: bool = True,
-    write: bool = True,
-    speak: bool = True,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Add or update a single language in candidate profile.
-
-    :param language: Language name (e.g. 'English', 'Hindi', 'Marathi', 'German').
-    :param proficiency: 'Beginner', 'Proficient', or 'Expert'.
-    :param read: Can read.
-    :param write: Can write.
-    :param speak: Can speak.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.add_language(
-        language=language,
-        proficiency=proficiency,
-        read=read,
-        write=write,
-        speak=speak,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def update_job_search_status(
-    status_code_or_name: Any,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update job search availability status.
-
-    :param status_code_or_name: 1 / 'Actively searching jobs', 2 / 'Casual job seeker', 3 / 'Not looking for jobs'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_job_search_status(status_code_or_name=status_code_or_name, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_disability(
-    is_disabled: bool = False,
-    disability_type: Optional[str] = None,
-    percentage: Optional[int] = None,
-    details: Optional[str] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate differently abled / disability profile section.
-
-    :param is_disabled: Boolean indicating if differently abled.
-    :param disability_type: Category of disability (e.g. 'Physical', 'Visual', 'Hearing').
-    :param percentage: Percentage of disability (e.g. 40).
-    :param details: Description or reason.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_disability(
-        is_disabled=is_disabled,
-        disability_type=disability_type,
-        percentage=percentage,
-        details=details,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def delete_disability(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Clear differently abled / disability status from candidate profile.
-    CAUTION: Modifies live candidate profile. Confirm user intent before invoking.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.delete_disability(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_work_permit(
-    us_work_status: Optional[str] = None,
-    countries: Optional[List[str]] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update US work authorization status and international country work permits.
-
-    :param us_work_status: US status (e.g. 'Citizen', 'Green Card', 'Have H1 Visa', 'Need H1 Visa').
-    :param countries: List of countries candidate holds work permits for (e.g. ['USA', 'United Kingdom', 'Canada']).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_work_permit(
-        us_work_status=us_work_status,
-        countries=countries,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def update_career_break(
-    has_break: bool = True,
-    reason: Optional[str] = None,
-    start_date: Optional[str] = None,
-    end_date: Optional[str] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate career break status, reason, and dates.
-
-    :param has_break: True if candidate has a career break, False otherwise.
-    :param reason: Reason for career break (e.g. 'Higher studies', 'Medical', 'Caregiving').
-    :param start_date: Start date of break (YYYY-MM-DD or YYYY-MM).
-    :param end_date: End date of break (YYYY-MM-DD or YYYY-MM).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_career_break(
-        has_break=has_break,
-        reason=reason,
-        start_date=start_date,
-        end_date=end_date,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def delete_career_break(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Remove career break from candidate profile.
-    CAUTION: Modifies live candidate profile. Confirm user intent before invoking.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.delete_career_break(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def resend_email_verification(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Trigger resending of the verification email link to the candidate's registered inbox.
-    Helps fulfill the final profile completeness requirement.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.resend_email_verification(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-
-@mcp.tool()
-def touch_profile_pulse(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Touch profile headline to activate the 'Profile Updated: Today' recruiter visibility badge.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.touch_profile_pulse(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def sync_full_profile(
-    resume_source: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Synchronize full profile sections from a master resume JSON (accepts local file path or remote HTTP/HTTPS URL).
-
-    :param resume_source: Local filesystem path, remote HTTP/HTTPS URL, or raw JSON string of master resume.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.sync_full_profile(resume_source=resume_source, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_online_profiles(
-    profiles_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate online professional profiles (e.g. LinkedIn, GitHub, Behance, Portfolio).
-
-    :param profiles_list: List of dicts, each with 'profile' (e.g. 'LinkedIn') and 'url'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_online_profiles(profiles_list=profiles_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_work_samples(
-    samples_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate work sample links (e.g. GitHub repos, design portfolios).
-
-    :param samples_list: List of dicts, each with 'title' and 'url'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_work_samples(samples_list=samples_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_publications(
-    publications_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate research publications, white papers, or journal entries.
-
-    :param publications_list: List of dicts, each with 'title' and 'url'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_publications(publications_list=publications_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_presentations(
-    presentations_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate presentation links (e.g. SlideShare, SpeakerDeck).
-
-    :param presentations_list: List of dicts, each with 'title' and 'url'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_presentations(presentations_list=presentations_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_patents(
-    patents_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate patents filed or issued.
-
-    :param patents_list: List of dicts, each with 'title' and 'url'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_patents(patents_list=patents_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_certifications(
-    certifications_list: List[Dict[str, Any]],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update candidate certifications and official accreditations.
-
-    :param certifications_list: List of dicts, each with 'course' (name) and 'vendor' (issuer body).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_certifications(certifications_list=certifications_list, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def update_accomplishments(
-    accomplishments: Dict[str, Any],
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Update all accomplishments at once: online profiles, work samples, publications, presentations, patents, and certifications.
-
-    :param accomplishments: Dict containing optional keys: 'onlineProfiles', 'workSamples', 'publications', 'presentations', 'patents', 'certifications'.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return profile.update_accomplishments(accomplishments=accomplishments, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def upload_resume(
+    headline: Optional[str] = None,
+    summary: Optional[str] = None,
+    key_skills: Optional[List[str]] = None,
+    notice_period_days: Optional[int] = None,
+    location: Optional[Dict[str, Any]] = None,
+    career_profile: Optional[Dict[str, Any]] = None,
+    work_experience: Optional[List[Dict[str, Any]]] = None,
+    projects: Optional[List[Dict[str, Any]]] = None,
+    educations: Optional[List[Dict[str, Any]]] = None,
+    schools: Optional[List[Dict[str, Any]]] = None,
+    it_skills: Optional[List[Dict[str, Any]]] = None,
+    personal_details: Optional[Dict[str, Any]] = None,
+    languages: Optional[List[Dict[str, Any]]] = None,
+    job_search_status: Optional[str] = None,
+    disability: Optional[Dict[str, Any]] = None,
+    work_permit: Optional[Dict[str, Any]] = None,
+    career_break: Optional[Dict[str, Any]] = None,
+    accomplishments: Optional[Dict[str, Any]] = None,
+    add_item: Optional[Dict[str, Any]] = None,
+    item_type: Optional[str] = None,
+    item_id: Optional[str] = None,
     source: Optional[str] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Upload and attach a PDF resume to candidate's Naukri profile.
-
-    :param source: Local PDF file path, remote HTTP/HTTPS download URL, base64-encoded PDF string, or None (to use RESUME_PDF_PATH env).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return resume.upload_resume(source=source, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def download_resume(
     output_path: Optional[str] = None,
     extract_text: bool = True,
     include_base64: bool = False,
@@ -839,440 +190,260 @@ def download_resume(
     nauk_rt: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Download and read the candidate's active PDF resume from Naukri.com.
-    Returns the resume metadata (file name, size, upload date) and the extracted full text of the resume so AI assistants can inspect its contents.
-    Optionally saves the PDF to a local file path.
+    Candidate profile management: view profile details, update profile fields, boost recruiter search ranking,
+    synchronize master resume, manage resume documents and photo, audit duplicates, and safely delete profile items.
 
-    :param output_path: Optional local filesystem path to write the downloaded PDF file (e.g. 'resumes/resume.pdf').
-    :param extract_text: Whether to extract and return plain text content from the PDF (default: True).
-    :param include_base64: Whether to include base64-encoded PDF bytes in the response (default: False).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
+    :param action: Operation to perform:
+                   - 'get': Retrieve candidate profile details (specify 'section', default: 'all').
+                   - 'update': Modify provided profile fields leaving unspecified fields unchanged.
+                   - 'pulse': Touch profile pulse to bump modification timestamp and boost search rank.
+                   - 'sync_master': Synchronize profile from master resume source.
+                   - 'audit_duplicates': Audit and detect duplicate profile entries.
+                   - 'delete_item': Delete specific profile entity by item_type and item_id.
+                   - 'upload_resume': Upload PDF resume from file path, URL, or base64.
+                   - 'download_resume': Download active resume PDF and extract text.
+                   - 'delete_resume': Delete uploaded resume document.
+                   - 'upload_photo': Upload profile display photo.
+                   - 'delete_photo': Delete profile display photo.
+                   - 'resend_verification': Resend profile email verification.
+    :param section: Profile section to inspect when action='get' ('all', 'headline', 'summary', 'skills', 'experience', 'projects', 'education', 'personal').
+    :param headline: Professional resume headline (action='update').
+    :param summary: Profile summary text (action='update').
+    :param key_skills: List of key skill strings (action='update').
+    :param notice_period_days: Official notice period in days (0 for Serving Notice, 15, 30, 60, 90) (action='update').
+    :param location: Dict with 'city_id' and 'city_name' (e.g. {'city_id': 139, 'city_name': 'Pune'}) (action='update').
+    :param career_profile: Career preferences dict (expected_ctc, preferred_cities, target_roles, desired_job_types) (action='update').
+    :param work_experience: List of employment history dicts (action='update').
+    :param projects: List of project dicts (action='update').
+    :param educations: List of education/degree dicts (action='update').
+    :param schools: List of 10th/12th school records (action='update').
+    :param it_skills: List of IT skills with experience and lastUsed (action='update').
+    :param personal_details: Dict with gender, marital_status, birth_date, hometown, pincode, etc. (action='update').
+    :param languages: List of languages with proficiency (action='update').
+    :param job_search_status: Search status ('actively_looking', 'casually_exploring', 'not_looking') (action='update').
+    :param disability: Dict with disability details (action='update').
+    :param work_permit: Dict with US status and authorized country list (action='update').
+    :param career_break: Dict with break details, reason, start_date, end_date (action='update').
+    :param accomplishments: Dict of accomplishments (onlineProfiles, workSamples, publications, presentations, patents, certifications) (action='update').
+    :param add_item: Dict with 'type' ('project'|'it_skill'|'language') and item fields to add a single item without replacing list (action='update').
+    :param item_type: Entity type for action='delete_item' ('projects', 'employments', 'itskills', 'educations', 'schools', 'languages', 'disability', 'career_break').
+    :param item_id: Unique record ID string to delete for action='delete_item'.
+    :param source: File path, URL, or base64 data for upload actions (upload_resume, upload_photo, sync_master).
+    :param output_path: Local filesystem destination path when action='download_resume'.
+    :param extract_text: Whether to parse text from PDF when action='download_resume' (default True).
+    :param include_base64: Whether to return base64 payload when action='download_resume' (default False).
     """
-    return resume.download_resume(
-        output_path=output_path,
-        extract_text=extract_text,
-        include_base64=include_base64,
-        nauk_at=nauk_at,
-        nauk_rt=nauk_rt
-    )
-
-
-@mcp.tool()
-def upload_photo(
-    source: Optional[str] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Upload a professional profile photo / display avatar to the candidate's Naukri profile.
-    Boosts profile completeness score by +5% and activates recruiter avatar badge.
-
-    :param source: Optional local image file path (JPEG/PNG), base64 string, or None (generates professional avatar automatically).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return photo.upload_photo(source=source, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def audit_profile_duplicates(
-    canonical_skills: Optional[List[str]] = None,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Audit live profile for duplicate project entries and duplicate or obsolete IT skills.
-
-    :param canonical_skills: Optional list of valid skills. Any skill not in this list is flagged as obsolete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return duplicates.audit_duplicates(canonical_skills=canonical_skills, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_project(
-    project_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a specific project entry from the candidate profile by its projectId.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param project_id: The unique projectId to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_project(project_id=project_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_employment(
-    employment_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a specific employment / work experience entry by its employmentId.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param employment_id: The unique employmentId to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_employment(employment_id=employment_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_it_skill(
-    skill_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a specific IT skill entry from the structured skills table by its skillId.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param skill_id: The unique skillId to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_it_skill(skill_id=skill_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_education(
-    education_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a specific graduation / post-graduation education entry by its educationId.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param education_id: The unique educationId to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_education(education_id=education_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_school(
-    school_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a 10th or 12th class school entry by its schoolId.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param school_id: The unique schoolId to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_school(school_id=school_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_online_profile(
-    profile_item_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete an online professional profile link (LinkedIn, GitHub) by its ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param profile_item_id: The unique ID of the online profile to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_online_profile(profile_item_id=profile_item_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_work_sample(
-    sample_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a work sample link (GitHub repo, Behance) by its ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param sample_id: The unique ID of the work sample to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_work_sample(sample_id=sample_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_publication(
-    publication_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a research publication or white paper entry by its ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param publication_id: The unique ID of the publication to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_publication(publication_id=publication_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_presentation(
-    presentation_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete an online presentation link by its ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param presentation_id: The unique ID of the presentation to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_presentation(presentation_id=presentation_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_patent(
-    patent_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a patent filing or grant by its ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param patent_id: The unique ID of the patent to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_patent(patent_id=patent_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_certification(
-    certification_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a certification entry by its certificationId.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param certification_id: The unique certificationId to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_certification(certification_id=certification_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_language(
-    language_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete a language entry by its language ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param language_id: The unique language ID to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_language(language_id=language_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_resume(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete the uploaded resume document file from the candidate profile.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_resume(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def delete_photo(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Delete the uploaded candidate display photo from the candidate profile.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return photo.delete_photo(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-
-@mcp.tool()
-def delete_profile_item(
-    item_type: str,
-    item_id: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Generic delete tool: Delete any specific item/subresource from candidate profile by type and ID.
-    CAUTION: Permanent deletion. Confirm user intent before invoking.
-
-    :param item_type: One of 'projects', 'employments', 'itskills', 'educations', 'schools',
-                      'onlineProfiles', 'workSamples', 'publications', 'presentations',
-                      'patents', 'certifications', 'languages'.
-    :param item_id: The unique ID string of the item to delete.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return delete.delete_profile_item(item_type=item_type, item_id=item_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def get_profile_analytics(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Fetch recruiter search appearances, profile views, profile completeness score,
-    and a prioritized list of missing profile sections.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return analytics.get_profile_analytics(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def get_recruiter_inbox(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Fetch recruiter messages, interview invitations, and unread communication count.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return analytics.get_recruiter_inbox(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def get_notification_summary(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Fetch active notification counters (recommended jobs count, pending profile actions).
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return analytics.get_notification_summary(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def get_salary_components(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Retrieve Naukri compensation breakdown labels (Fixed, Variable, Stocks, ESOPs, RSUs).
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return analytics.get_salary_labels(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def get_blocked_companies(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Retrieve list of companies blocked from viewing candidate profile.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return analytics.get_blocked_companies(nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def block_company(
-    company_id: str,
-    company_name: str,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Block a company so its recruiters cannot see candidate profile.
-
-    :param company_id: Numerical company ID.
-    :param company_name: Name of the company.
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return analytics.block_company(company_id=company_id, company_name=company_name, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def search_taxonomy(
-    entity_type: str = "certificate",
-    query: str = "",
-    limit: int = 20,
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    Search standardized Naukri entities by keyword to retrieve official IDs.
-
-    :param entity_type: 'certificate' (4,000+ certifications), 'city' (5,800+ cities), 'language', 'country', 'state'.
-    :param query: Keyword to search (e.g. 'AWS', 'Pune', 'English').
-    :param limit: Max items to return (default 20).
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return taxonomy.search_taxonomy(entity_type=entity_type, query=query, limit=limit, nauk_at=nauk_at, nauk_rt=nauk_rt)
-
-
-@mcp.tool()
-def get_taxonomy_versions(
-    nauk_at: Optional[str] = None,
-    nauk_rt: Optional[str] = None
-) -> Dict[str, Any]:
-    """
-    List all 32 central entity taxonomies available in Naukri and their current versions.
-
-    :param nauk_at: Optional bearer token.
-    :param nauk_rt: Optional refresh token.
-    """
-    return taxonomy.get_taxonomy_versions(nauk_at=nauk_at, nauk_rt=nauk_rt)
+    if action == "get":
+        return profile.get_profile(section=section, nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "pulse":
+        return profile.touch_profile_pulse(nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "sync_master":
+        return profile.sync_full_profile(master_resume_source=source, nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "audit_duplicates":
+        return duplicates.audit_profile_duplicates(nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "delete_item":
+        norm_type = (item_type or "").strip().lower()
+        if norm_type in ("disability",):
+            return profile.delete_disability(nauk_at=nauk_at, nauk_rt=nauk_rt)
+        elif norm_type in ("career_break", "careerbreak", "break"):
+            return profile.delete_career_break(nauk_at=nauk_at, nauk_rt=nauk_rt)
+        elif norm_type and item_id:
+            return delete.delete_profile_item(item_type=item_type, item_id=item_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
+        else:
+            return {
+                "status": "error",
+                "message": "Both item_type and item_id are required for action='delete_item' (e.g. item_type='projects', item_id='12345')."
+            }
+
+    elif action == "upload_resume":
+        return resume.upload_resume(source=source, nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "download_resume":
+        return resume.download_resume(
+            output_path=output_path,
+            extract_text=extract_text,
+            include_base64=include_base64,
+            nauk_at=nauk_at,
+            nauk_rt=nauk_rt
+        )
+
+    elif action == "delete_resume":
+        return delete.delete_resume(nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "upload_photo":
+        return photo.upload_photo(source=source, nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "delete_photo":
+        return delete.delete_photo(nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "resend_verification":
+        return profile.resend_email_verification(nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    elif action == "update":
+        updates_performed = []
+        errors = []
+
+        if headline is not None:
+            res = profile.update_headline(headline=headline, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("headline")
+            else:
+                errors.append({"section": "headline", "error": res})
+
+        if summary is not None:
+            res = profile.update_summary(summary=summary, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("summary")
+            else:
+                errors.append({"section": "summary", "error": res})
+
+        if key_skills is not None:
+            res = profile.update_key_skills(skills=key_skills, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("key_skills")
+            else:
+                errors.append({"section": "key_skills", "error": res})
+
+        if notice_period_days is not None:
+            res = profile.update_notice_period(days=notice_period_days, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("notice_period")
+            else:
+                errors.append({"section": "notice_period", "error": res})
+
+        if location is not None:
+            c_id = location.get("city_id") or location.get("id") or 139
+            c_name = location.get("city_name") or location.get("city") or "Pune"
+            res = profile.update_location(city_id=int(c_id), city_name=str(c_name), nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("location")
+            else:
+                errors.append({"section": "location", "error": res})
+
+        if career_profile is not None:
+            res = profile.update_career_profile(**career_profile, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("career_profile")
+            else:
+                errors.append({"section": "career_profile", "error": res})
+
+        if work_experience is not None:
+            res = profile.update_work_experience(work_list=work_experience, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("work_experience")
+            else:
+                errors.append({"section": "work_experience", "error": res})
+
+        if projects is not None:
+            res = profile.update_projects(projects_list=projects, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("projects")
+            else:
+                errors.append({"section": "projects", "error": res})
+
+        if educations is not None:
+            res = profile.update_educations(educations_list=educations, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("educations")
+            else:
+                errors.append({"section": "educations", "error": res})
+
+        if schools is not None:
+            res = profile.update_schools(schools_list=schools, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("schools")
+            else:
+                errors.append({"section": "schools", "error": res})
+
+        if it_skills is not None:
+            res = profile.update_it_skills(it_skills_list=it_skills, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("it_skills")
+            else:
+                errors.append({"section": "it_skills", "error": res})
+
+        if personal_details is not None:
+            res = profile.update_personal_details(**personal_details, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("personal_details")
+            else:
+                errors.append({"section": "personal_details", "error": res})
+
+        if languages is not None:
+            res = profile.update_languages(languages_list=languages, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("languages")
+            else:
+                errors.append({"section": "languages", "error": res})
+
+        if job_search_status is not None:
+            res = profile.update_job_search_status(status=job_search_status, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("job_search_status")
+            else:
+                errors.append({"section": "job_search_status", "error": res})
+
+        if disability is not None:
+            res = profile.update_disability(**disability, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("disability")
+            else:
+                errors.append({"section": "disability", "error": res})
+
+        if work_permit is not None:
+            res = profile.update_work_permit(**work_permit, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("work_permit")
+            else:
+                errors.append({"section": "work_permit", "error": res})
+
+        if career_break is not None:
+            res = profile.update_career_break(**career_break, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("career_break")
+            else:
+                errors.append({"section": "career_break", "error": res})
+
+        if accomplishments is not None:
+            res = profile.update_accomplishments(accomplishments_dict=accomplishments, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            if res.get("status") == "success":
+                updates_performed.append("accomplishments")
+            else:
+                errors.append({"section": "accomplishments", "error": res})
+
+        if add_item is not None:
+            item_kind = add_item.get("type", "").strip().lower()
+            item_data = add_item.get("data") or {k: v for k, v in add_item.items() if k != "type"}
+            if item_kind in ("project", "projects"):
+                res = profile.add_project(project_dict=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            elif item_kind in ("it_skill", "itskill", "skill", "skills"):
+                res = profile.add_it_skill(skill_dict=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            elif item_kind in ("language", "languages"):
+                res = profile.add_language(language_dict=item_data, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            else:
+                res = {"status": "error", "message": f"Unknown add_item type: '{item_kind}'"}
+
+            if res.get("status") == "success":
+                updates_performed.append(f"add_{item_kind}")
+            else:
+                errors.append({"section": f"add_{item_kind}", "error": res})
+
+        return {
+            "status": "success" if not errors else ("partial_success" if updates_performed else "error"),
+            "updated_sections": updates_performed,
+            "errors": errors if errors else None
+        }
+
+    return {"status": "error", "message": f"Unknown action: '{action}'"}
 
 
 @mcp.tool()
 def search_jobs(
-    keywords: str,
+    keywords: Union[str, List[str]],
     location: str = "Pune",
     experience: int = 5,
     limit: int = 20,
@@ -1281,13 +452,13 @@ def search_jobs(
     nauk_rt: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Search live jobs on Naukri and categorize by Apply Flow (Category 1 Direct vs Category 2 Questionnaire).
+    Search live jobs on Naukri and categorize results by application flow (1-Click Direct vs Screening Questionnaire).
 
-    :param keywords: Comma-separated query string (e.g. 'Python, FastAPI, Full Stack').
+    :param keywords: Comma-separated string or list of keyword queries (e.g. 'Python, FastAPI, Full Stack').
     :param location: Target city or location string (default 'Pune').
     :param experience: Minimum years of experience (default 5).
     :param limit: Maximum jobs to return (default 20).
-    :param job_age_days: Freshness filter in days (default 3).
+    :param job_age_days: Only include jobs posted within the last N days (default 3).
     :param nauk_at: Optional bearer token.
     :param nauk_rt: Optional refresh token.
     """
@@ -1304,37 +475,176 @@ def search_jobs(
 
 @mcp.tool()
 def get_job_details(
-    job_id: str,
+    job_ids: Union[int, str, List[Union[int, str]]],
     nauk_at: Optional[str] = None,
     nauk_rt: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Retrieve full job description, requirements, and screening questionnaire schema for a job ID.
+    Retrieve complete job description, requirements, company info, and screening questionnaire schema for one or more job IDs.
+    Accepts a single job ID (e.g. "1234567") or a list of job IDs (e.g. ["1234567", "7654321"]).
 
-    :param job_id: Numerical job ID from Naukri.
+    :param job_ids: Numerical job ID string/int or list of job IDs from Naukri.
     :param nauk_at: Optional bearer token.
     :param nauk_rt: Optional refresh token.
     """
-    return jobs.get_job_details(job_id=job_id, nauk_at=nauk_at, nauk_rt=nauk_rt)
+    if isinstance(job_ids, list):
+        results = []
+        for jid in job_ids:
+            res = jobs.get_job_details(job_id=str(jid).strip(), nauk_at=nauk_at, nauk_rt=nauk_rt)
+            results.append(res)
+        return {"status": "success", "count": len(results), "jobs": results}
+
+    return jobs.get_job_details(job_id=str(job_ids).strip(), nauk_at=nauk_at, nauk_rt=nauk_rt)
 
 
 @mcp.tool()
-def apply_to_job(
-    job_id: str,
+def apply_to_jobs(
+    job_ids: Union[int, str, List[Union[int, str]]],
     answers: Optional[List[Dict[str, Any]]] = None,
     nauk_at: Optional[str] = None,
     nauk_rt: Optional[str] = None
 ) -> Dict[str, Any]:
     """
-    Submit an application to a Naukri job (Category 1 Direct Apply or Category 2 Questionnaire).
-    Pure stateless: does not modify local disk files.
+    Submit job applications to one or more Naukri jobs with optional screening questionnaire answers.
+    Accepts a single job ID or a list of job IDs.
 
-    :param job_id: Numerical job ID from Naukri.
+    :param job_ids: Numerical job ID string/int or list of job IDs from Naukri.
     :param answers: Optional list of questionnaire answers, each dict with {'questionId': str, 'answer': str}.
     :param nauk_at: Optional bearer token.
     :param nauk_rt: Optional refresh token.
     """
-    return jobs.apply_to_job(job_id=job_id, answers=answers, nauk_at=nauk_at, nauk_rt=nauk_rt)
+    if isinstance(job_ids, list):
+        results = []
+        for jid in job_ids:
+            res = jobs.apply_to_job(job_id=str(jid).strip(), answers=answers, nauk_at=nauk_at, nauk_rt=nauk_rt)
+            results.append(res)
+        return {"status": "success", "count": len(results), "results": results}
+
+    return jobs.apply_to_job(job_id=str(job_ids).strip(), answers=answers, nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+
+@mcp.tool()
+def manage_recruiter_interactions(
+    action: Literal[
+        "analytics",
+        "inbox",
+        "notifications",
+        "salary_insights",
+        "list_blocked",
+        "block_company",
+        "suggest_taxonomy"
+    ] = "analytics",
+    company_id: Optional[str] = None,
+    company_name: Optional[str] = None,
+    taxonomy_type: str = "certificate",
+    query: str = "",
+    limit: int = 20,
+    nauk_at: Optional[str] = None,
+    nauk_rt: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Recruiter interactions, candidate visibility analytics, employer privacy, and central taxonomies.
+
+    :param action: Operation to perform:
+                   - 'analytics': Recruiter search appearances, profile views, completeness score, and missing sections.
+                   - 'inbox': Recruiter messages, interview invitations, and unread communication counts.
+                   - 'notifications': System notification counters and recommended job alerts.
+                   - 'salary_insights': Compensation component breakdown labels (Fixed, Variable, Stocks/RSUs).
+                   - 'list_blocked': List companies blocked from viewing your profile.
+                   - 'block_company': Block an employer from seeing your profile (requires company_id & company_name).
+                   - 'suggest_taxonomy': Search standardized entities (skills, certificates, cities, or versions).
+    :param company_id: Company ID string (required for 'block_company').
+    :param company_name: Company name string (required for 'block_company').
+    :param taxonomy_type: One of 'certificate', 'city', 'language', 'country', 'state', or 'versions'.
+    :param query: Search string for taxonomy autosuggest (action='suggest_taxonomy').
+    :param limit: Maximum taxonomy results to return (default 20).
+    :param nauk_at: Optional bearer token.
+    :param nauk_rt: Optional refresh token.
+    """
+    if action == "analytics":
+        return analytics.get_profile_analytics(nauk_at=nauk_at, nauk_rt=nauk_rt)
+    elif action == "inbox":
+        return analytics.get_recruiter_inbox(nauk_at=nauk_at, nauk_rt=nauk_rt)
+    elif action == "notifications":
+        return analytics.get_notification_summary(nauk_at=nauk_at, nauk_rt=nauk_rt)
+    elif action == "salary_insights":
+        return analytics.get_salary_labels(nauk_at=nauk_at, nauk_rt=nauk_rt)
+    elif action == "list_blocked":
+        return analytics.get_blocked_companies(nauk_at=nauk_at, nauk_rt=nauk_rt)
+    elif action == "block_company":
+        if not company_id or not company_name:
+            return {"status": "error", "message": "Both company_id and company_name are required to block a company."}
+        return analytics.block_company(company_id=company_id, company_name=company_name, nauk_at=nauk_at, nauk_rt=nauk_rt)
+    elif action == "suggest_taxonomy":
+        if taxonomy_type == "versions":
+            return taxonomy.get_taxonomy_versions(nauk_at=nauk_at, nauk_rt=nauk_rt)
+        return taxonomy.search_taxonomy(entity_type=taxonomy_type, query=query, limit=limit, nauk_at=nauk_at, nauk_rt=nauk_rt)
+
+    return {"status": "error", "message": f"Unknown action: '{action}'"}
+
+
+@mcp.tool()
+def manage_session(
+    action: Literal["validate", "refresh"] = "validate",
+    nauk_rt: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Session verification, token expiration inspection, and automatic token renewal.
+
+    :param action: 'validate' (inspect current token expiry and status),
+                   'refresh' (renew access token NAUK_AT using refresh token NAUK_RT).
+    :param nauk_rt: Optional override refresh token (defaults to session RT or NAUK_RT in environment).
+    """
+    from naukri_mcp.auth import (
+        refresh_token_via_nauk_rt,
+        load_env_file,
+        decode_jwt_exp,
+        current_session_rt,
+        current_session_id,
+        SESSION_STORE
+    )
+    load_env_file()
+    rt = (nauk_rt or current_session_rt.get() or os.getenv("NAUK_RT", "")).strip()
+    if not rt:
+        return {
+            "status": "error",
+            "message": "No NAUK_RT refresh token provided in parameters, active session, or environment."
+        }
+
+    if action == "refresh":
+        success, new_at = refresh_token_via_nauk_rt(rt)
+        if success:
+            exp_sec = decode_jwt_exp(new_at)
+            sid = current_session_id.get()
+            if sid and sid in SESSION_STORE:
+                SESSION_STORE[sid]["at"] = new_at
+                SESSION_STORE[sid]["last_seen"] = time.time()
+            return {
+                "status": "success",
+                "message": "Naukri session token renewed successfully.",
+                "nauk_at_preview": f"{new_at[:15]}...{new_at[-10:]}",
+                "expires_at_timestamp": exp_sec,
+                "expires_in_minutes": max(0, int((exp_sec - time.time()) / 60)) if exp_sec else None,
+                "multi_tenant_session_id": sid or "local_environment"
+            }
+        return {
+            "status": "error",
+            "message": "Failed to refresh token via Naukri CloudGateway.",
+            "hint": "Your NAUK_RT cookie may have expired or is invalid. Log in to naukri.com to obtain a fresh nauk_rt cookie."
+        }
+    else:  # validate
+        current_at = os.getenv("NAUK_AT", "").strip()
+        exp_sec = decode_jwt_exp(current_at) if current_at else 0
+        is_expired = (exp_sec < time.time()) if exp_sec else True
+        sid = current_session_id.get()
+        return {
+            "status": "success",
+            "authenticated": bool(rt),
+            "access_token_present": bool(current_at),
+            "access_token_expired": is_expired,
+            "expires_in_minutes": max(0, int((exp_sec - time.time()) / 60)) if exp_sec and not is_expired else 0,
+            "multi_tenant_session_id": sid or "local_environment"
+        }
 
 
 # ---------------------------------------------------------------------------
@@ -1447,82 +757,39 @@ def resource_platform_guidelines() -> str:
 @mcp.resource("naukri://tools/directory")
 def resource_tools_directory() -> str:
     """
-    Categorized directory of all 63 MCP tools with functional grouping and safety tiers.
+    Categorized directory of the unified 6 MCP tools with functional grouping and safety tiers.
     """
     directory = {
-        "total_tools": 63,
-        "categories": {
-            "session_and_auth": {
-                "tools": ["refresh_session_token"],
-                "tier": "safe_read"
-            },
-            "profile_core_mutations": {
-                "tools": [
-                    "update_headline", "update_summary", "update_key_skills",
-                    "update_notice_period", "update_location", "update_career_profile",
-                    "update_personal_details", "update_job_search_status"
+        "total_tools": 6,
+        "architecture": "Unified 6-Tool Architecture",
+        "tools": {
+            "manage_profile": {
+                "actions": [
+                    "get", "update", "pulse", "sync_master", "audit_duplicates",
+                    "delete_item", "upload_resume", "download_resume", "delete_resume",
+                    "upload_photo", "delete_photo", "resend_verification"
                 ],
-                "tier": "mutation"
+                "description": "Candidate profile inspection, section updates, activity pulse, resume & photo, and deletions."
             },
-            "experience_and_skills": {
-                "tools": [
-                    "update_work_experience", "update_projects", "add_project",
-                    "update_it_skills", "add_it_skill"
+            "search_jobs": {
+                "description": "Parametric search across Naukri open jobs categorized by apply flow."
+            },
+            "get_job_details": {
+                "description": "Comprehensive job requirements, specs, and screening questionnaire schema (single or batch)."
+            },
+            "apply_to_jobs": {
+                "description": "Stateless job application submission for single or batch jobs with questionnaire answers."
+            },
+            "manage_recruiter_interactions": {
+                "actions": [
+                    "analytics", "inbox", "notifications", "salary_insights",
+                    "list_blocked", "block_company", "suggest_taxonomy"
                 ],
-                "tier": "mutation"
+                "description": "Recruiter communications, search appearance analytics, notifications, employer blocking, and taxonomies."
             },
-            "education_and_schools": {
-                "tools": ["update_educations", "update_schools"],
-                "tier": "mutation"
-            },
-            "diversity_and_qualifications": {
-                "tools": [
-                    "update_languages", "add_language", "update_disability",
-                    "update_work_permit", "update_career_break"
-                ],
-                "tier": "mutation"
-            },
-            "accomplishments": {
-                "tools": [
-                    "update_online_profiles", "update_work_samples", "update_publications",
-                    "update_presentations", "update_patents", "update_certifications",
-                    "update_accomplishments"
-                ],
-                "tier": "quota_capped_mutation"
-            },
-            "media_and_artifacts": {
-                "tools": ["upload_resume", "upload_photo"],
-                "tier": "mutation"
-            },
-            "pulse_and_analytics": {
-                "tools": [
-                    "touch_profile_pulse", "resend_email_verification", "sync_full_profile",
-                    "get_profile_analytics", "get_recruiter_inbox", "get_notification_summary",
-                    "get_salary_components"
-                ],
-                "tier": "safe_read_or_pulse"
-            },
-            "inspection_and_taxonomy": {
-                "tools": [
-                    "get_profile", "search_taxonomy", "get_taxonomy_versions",
-                    "get_blocked_companies"
-                ],
-                "tier": "safe_read"
-            },
-            "job_discovery_and_applications": {
-                "tools": ["search_jobs", "get_job_details", "apply_to_job", "block_company"],
-                "tier": "external_or_application"
-            },
-            "destructive_deletions": {
-                "tools": [
-                    "audit_profile_duplicates", "delete_project", "delete_employment",
-                    "delete_it_skill", "delete_education", "delete_school",
-                    "delete_online_profile", "delete_work_sample", "delete_publication",
-                    "delete_presentation", "delete_patent", "delete_certification",
-                    "delete_language", "delete_disability", "delete_career_break",
-                    "delete_resume", "delete_photo", "delete_profile_item"
-                ],
-                "tier": "destructive_requires_confirmation"
+            "manage_session": {
+                "actions": ["validate", "refresh"],
+                "description": "Multi-tenant session verification and access token renewal."
             }
         }
     }
@@ -1538,10 +805,10 @@ def audit_profile() -> str:
     """Prompt template to inspect profile completeness and propose optimizations."""
     return (
         "You are an expert technical career advisor analyzing a candidate's Naukri profile.\n"
-        "1. Call 'get_profile_analytics' to inspect recruiter search appearances, profile views, and incomplete sections.\n"
-        "2. Call 'get_profile' with section='headline' and section='summary' to inspect existing copy.\n"
+        "1. Call 'manage_recruiter_interactions' with action='analytics' to inspect recruiter search appearances, profile views, and incomplete sections.\n"
+        "2. Call 'manage_profile' with action='get' and section='headline' to inspect existing headline and positioning.\n"
         "3. Provide actionable suggestions to improve recruiter search appearances and achieve 100% profile completeness.\n"
-        "SAFETY NOTE: If recommending removal of duplicate or obsolete items, be extremely cautious with delete tools. Always confirm with the user before calling any deletion tool."
+        "SAFETY NOTE: If recommending removal of duplicate or obsolete items, confirm with user before invoking delete actions."
     )
 
 
@@ -1551,10 +818,10 @@ def manage_profile_deletions() -> str:
     return (
         "CRITICAL CAUTION: You are about to manage deletions on a live candidate profile.\n"
         "Deleting projects, employments, education, or skills permanently removes them from Naukri.\n"
-        "1. First call 'get_profile' for the relevant section (e.g. section='projects') to list existing items and their unique IDs.\n"
+        "1. First call 'manage_profile' with action='get' (e.g. section='projects') to list existing items and their unique IDs.\n"
         "2. Display the exact items to the user with their titles, dates, and IDs.\n"
         "3. Explicitly ask for user confirmation before deleting.\n"
-        "4. Only upon explicit confirmation, invoke the specific delete tool (e.g. 'delete_project', 'delete_employment', 'delete_it_skill').\n"
+        "4. Only upon explicit confirmation, invoke 'manage_profile' with action='delete_item', item_type='<type>', and item_id='<id>'.\n"
         "5. Re-fetch the section to confirm clean deletion."
     )
 
@@ -1564,10 +831,10 @@ def resolve_screening_questionnaire(job_id: str) -> str:
     """Prompt template to retrieve job questionnaire and resolve answers truthfully."""
     return (
         f"You are assisting a candidate with applying for Naukri Job ID {job_id}.\n"
-        f"1. Call 'get_job_details' with job_id='{job_id}' to retrieve the screening questionnaire.\n"
+        f"1. Call 'get_job_details' with job_ids='{job_id}' to retrieve the screening questionnaire.\n"
         "2. Review the questions (e.g. notice period, CTC, experience, specific technologies).\n"
         "3. Formulate concise, truthful answers matching candidate facts.\n"
-        "4. Call 'apply_to_job' with the resolved answers array to submit the application."
+        "4. Call 'apply_to_jobs' with the resolved answers array to submit the application."
     )
 
 
@@ -1578,8 +845,8 @@ def job_search_and_apply(keywords: str, location: str = "Pune", experience: int 
         f"Search and evaluate jobs on Naukri for keywords: '{keywords}' in '{location}' with {experience} YOE.\n"
         "1. Call 'search_jobs' to find matching open positions.\n"
         "2. Categorize results into Category 1 (Direct 1-Click Apply) and Category 2 (Questionnaire).\n"
-        "3. For Category 1 jobs, call 'apply_to_job' directly.\n"
-        "4. For Category 2 jobs, call 'get_job_details', resolve the screening questions, and submit.\n"
+        "3. For Category 1 jobs, call 'apply_to_jobs' directly.\n"
+        "4. For Category 2 jobs, call 'get_job_details', resolve the screening questions, and submit via 'apply_to_jobs'.\n"
         "5. Output a structured summary table showing applied jobs and any skipped positions."
     )
 
@@ -1590,11 +857,10 @@ def tailor_and_update_profile(target_role: str = "Full Stack Developer") -> str:
     return (
         f"You are synchronizing and tailoring the candidate's Naukri profile for target role: '{target_role}'.\n"
         "1. Read resource 'naukri://candidate/master-resume' to obtain authenticated candidate facts, projects, and skills.\n"
-        "2. Read resource 'naukri://rules/platform-guidelines' to review accomplishment quotas (max 5 items) and date rules.\n"
-        "3. Inspect current live state via 'get_profile(section=\"all\")'.\n"
-        "4. Update core positioning via 'update_headline', 'update_summary', 'update_key_skills', and 'update_career_profile'.\n"
-        "5. Synchronize IT skills via 'update_it_skills' ensuring proper version and non-zero experience fields.\n"
-        "6. Confirm all updates by reading resource 'naukri://profile/current'."
+        "2. Read resource 'naukri://rules/platform-guidelines' to review accomplishment quotas and date rules.\n"
+        "3. Inspect current live state via 'manage_profile(action=\"get\", section=\"all\")'.\n"
+        "4. Update core positioning via 'manage_profile(action=\"update\", headline=\"...\", summary=\"...\", key_skills=[...])'.\n"
+        "5. Confirm all updates by reading resource 'naukri://profile/current'."
     )
 
 
@@ -1603,9 +869,9 @@ def daily_profile_refresh() -> str:
     """Prompt template for daily candidate visibility maintenance and recruiter communications audit."""
     return (
         "Perform daily Naukri candidate profile maintenance to maximize recruiter visibility:\n"
-        "1. Call 'touch_profile_pulse' to refresh the profile modification timestamp and bump search ranking.\n"
-        "2. Read resource 'naukri://inbox/recruiter-mails' and call 'get_recruiter_inbox' to audit unread recruiter messages.\n"
-        "3. Call 'get_notification_summary' to check recruiter views, shortlist alerts, and job recommendation updates.\n"
+        "1. Call 'manage_profile' with action='pulse' to refresh the profile modification timestamp and bump search ranking.\n"
+        "2. Read resource 'naukri://inbox/recruiter-mails' or call 'manage_recruiter_interactions' with action='inbox' to audit unread recruiter messages.\n"
+        "3. Call 'manage_recruiter_interactions' with action='notifications' to check recruiter views and shortlist alerts.\n"
         "4. Read resource 'naukri://analytics/dashboard' to evaluate search appearance trends over the last 30 days.\n"
         "5. Summarize key actions and recruiter opportunities clearly for the candidate."
     )
@@ -1620,7 +886,7 @@ def handle_job_application(job_id_or_url: str) -> str:
         "2. Call 'get_job_details' with the Job ID to retrieve title, employer, requirements, and screening questionnaire.\n"
         "3. Read resource 'naukri://candidate/master-resume' to cross-reference candidate qualifications against requirements.\n"
         "4. Present the match score and draft answers for the screening questions to the user.\n"
-        "5. Upon explicit user confirmation, call 'apply_to_job' with the answers to submit."
+        "5. Upon explicit user confirmation, call 'apply_to_jobs' with the answers to submit."
     )
 
 
@@ -1719,7 +985,6 @@ class MultiTenantSessionMiddleware:
             if not pdf_url:
                 pdf_url = headers.get("x-resume-pdf", "")
 
-            # If incoming request carries session id, update session store
             req_sess_id = headers.get("mcp-session-id", "") or qs.get("session_id", [""])[0]
             if req_sess_id and rt:
                 req_sess_id = req_sess_id.replace("-", "")

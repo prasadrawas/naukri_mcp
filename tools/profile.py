@@ -1130,9 +1130,11 @@ def resend_email_verification(
     """
     at, rt = resolve_auth_tokens(nauk_at, nauk_rt)
     url = "https://www.naukri.com/cloudgateway-mynaukri/resman-aggregator-services/v0/users/self/verifyEmail"
-    headers = get_headers(at, rt, content_type="application/json", is_mutation=False, app_id="105", system_id="js")
+    headers = get_headers(at, rt, content_type="application/json", is_mutation=False, app_id="105", system_id="105")
+    headers["clientid"] = "d3skt0p"
 
-    status, resp = make_api_request(url, method="POST", headers=headers, data=b"{}")
+    payload = {"verifyPrimaryEmail": True, "verifySecondaryEmail": False}
+    status, resp = make_api_request(url, method="POST", headers=headers, data=json.dumps(payload).encode("utf-8"))
     if status in (200, 201, 204):
         return {
             "status": "success",

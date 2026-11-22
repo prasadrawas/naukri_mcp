@@ -1,23 +1,37 @@
 # naukri-mcp: Model Context Protocol (MCP) Server for Naukri.com
 
-Production **Model Context Protocol (MCP)** Server providing **64 specialized tools**, resources, and prompts for **Naukri.com**. Designed to be deployed with zero required environment variables and connected seamlessly to modern AI assistants including **Claude Web**, **Google Gemini**, **Claude Desktop**, **Cursor**, and **Antigravity**.
+Production **Model Context Protocol (MCP)** Server providing a consolidated **unified 6-tool architecture** for **Naukri.com**. Designed to be deployed with zero required environment variables and connected seamlessly to modern AI assistants including **Claude Web**, **Google Gemini**, **Claude Desktop**, **Cursor**, and **Antigravity**.
 
 ---
 
 ## 🌟 Key Architecture Highlights
 
-- **Standalone & Portable Repository:** Completely self-contained with zero hardcoded paths and no dependency on local candidate files.
+- **Consolidated 6-Tool Architecture:** Replaced 64 fine-grained tools with 6 high-level, parameterized tools. Reduces LLM context schema overhead by **~85%**, drastically speeding up LLM response times.
+- **Single-Approval Permission Flow:** In web-based AI clients like Gemini Web and Claude Web that prompt for per-tool approval, approving `manage_profile` once unlocks all profile reading, updating, pulsing, resume parsing, and duplicate management without queueing dozens of modal permission interruptions.
+- **Standalone & Portable Repository:** Completely self-contained with zero hardcoded local filesystem paths or machine-specific tokens.
 - **Dual Transport Support (Streamable HTTP & SSE):** Supports both the modern **Streamable HTTP** specification (`/mcp` and `/sse` via `POST`) and legacy **HTTP+SSE** (`/sse` via `GET`), with full cross-origin CORS support.
 - **Zero-Config Multi-Tenant Deployment:** Deploy on Railway, Render, Fly.io, or any container host with **zero environment variables required**.
 - **Personalized URL Query Parameter Connection:** Each user passes their credentials dynamically via URL query parameters (`https://<domain>/mcp?rt=YOUR_NAUK_RT_COOKIE`) or custom HTTP headers (`X-Naukri-RT`, etc.).
-- **Smart Session Caching:** Access tokens (`nauk_at`) and session credentials are bound to each client's session and cached in memory. The assistant **never repeatedly asks for tokens** across turns or chats, only prompting if the token is missing or has actually expired on Naukri.
-- **64 Comprehensive Tools:** Complete CloudGateway API coverage across profile management, IT skills, 18+ projects, accomplishments, recruiter communications, analytics, and job applications.
+- **Smart Session Caching:** Access tokens (`nauk_at`) and session credentials are bound to each client's session and cached in memory. The assistant never repeatedly asks for tokens across turns or chats.
+
+---
+
+## 🛠️ The 6 Unified MCP Tools
+
+| # | Tool Name | Responsibilities | Key Actions / Parameters |
+|---|---|---|---|
+| 1 | `manage_profile` | Full candidate profile management: view profile details, update profile fields, touch activity pulse, sync master resume, upload/download resume & photo, audit duplicates, and safely delete profile items. | `action`: `'get'`, `'update'`, `'pulse'`, `'sync_master'`, `'audit_duplicates'`, `'delete_item'`, `'upload_resume'`, `'download_resume'`, `'delete_resume'`, `'upload_photo'`, `'delete_photo'`, `'resend_verification'`<br>`section`, `headline`, `summary`, `key_skills`, `notice_period_days`, `location`, `career_profile`, `work_experience`, `projects`, `educations`, `schools`, `it_skills`, `personal_details`, `languages`, `job_search_status`, `disability`, `work_permit`, `career_break`, `accomplishments`, `add_item`, `item_type`, `item_id`, `source`, `output_path`, `extract_text` |
+| 2 | `search_jobs` | Parametric live job discovery on Naukri categorized by application flow (1-Click Direct vs Screening Questionnaire). | `keywords` (string or list), `location`, `experience`, `limit`, `job_age_days` |
+| 3 | `get_job_details` | Retrieve comprehensive job description, technical requirements, company facts, and screening questionnaire schema for one or more job IDs. | `job_ids` (single int/str or list of IDs) |
+| 4 | `apply_to_jobs` | Stateless job application submission for single or batch jobs with questionnaire answers. | `job_ids` (single int/str or list of IDs), `answers` (list of `{"questionId": str, "answer": str}`) |
+| 5 | `manage_recruiter_interactions` | Candidate visibility analytics, recruiter communication inbox, notifications, salary insights, employer blocking, and central taxonomies. | `action`: `'analytics'`, `'inbox'`, `'notifications'`, `'salary_insights'`, `'list_blocked'`, `'block_company'`, `'suggest_taxonomy'`<br>`company_id`, `company_name`, `taxonomy_type` (`'certificate'`, `'city'`, `'language'`, `'country'`, `'versions'`), `query`, `limit` |
+| 6 | `manage_session` | Session verification, token expiration inspection, and automatic token renewal. | `action`: `'validate'`, `'refresh'`<br>`nauk_rt` (optional override) |
 
 ---
 
 ## 🚀 1-Click / Docker Deployment on Railway
 
-Anyone can fork or clone this repository and deploy it immediately without configuring secrets or environment variables during deployment.
+Deploy immediately without configuring secrets or environment variables during deployment:
 
 ### Quick Railway Deployment:
 1. Fork or push this repository to your GitHub account.
@@ -37,12 +51,9 @@ docker run -p 8000:8000 naukri-mcp
 ## 🔌 Connecting to AI Clients
 
 ### 1. Claude AI Web (Custom Connectors)
-
-Claude Web supports remote MCP servers directly via Custom Connectors:
-
 1. In **Claude AI**, go to **Settings** &rarr; **Connectors** (or open the chat tools menu and click **Add custom connector**).
 2. Fill in the fields:
-   - **Name:** `Naukri MCP` (or your preferred name)
+   - **Name:** `Naukri MCP`
    - **URL:** Use the Streamable HTTP endpoint with your `rt` token:
      ```text
      https://<YOUR-RAILWAY-APP>.up.railway.app/mcp?rt=YOUR_NAUK_RT_COOKIE
@@ -50,14 +61,12 @@ Claude Web supports remote MCP servers directly via Custom Connectors:
      *(Note: `/sse?rt=...` is also supported)*
 3. When prompted with *"Couldn't determine how this server signs in"*, click **Continue anyway**.
 4. Under **Authentication**, select **No sign-in** *(because your token is already authenticated via the URL parameter)*.
-5. Click **Add**. All 63 tools will be registered immediately!
+5. Click **Add**. All 6 tools are registered immediately!
 
 ---
 
 ### 2. Google Gemini & Antigravity
-
-Add `naukri-mcp` to your MCP configuration (e.g. `mcp_config.json` or `settings.json`):
-
+Add `naukri-mcp` to your MCP configuration (`mcp_config.json` or `settings.json`):
 ```json
 {
   "mcpServers": {
@@ -71,9 +80,7 @@ Add `naukri-mcp` to your MCP configuration (e.g. `mcp_config.json` or `settings.
 ---
 
 ### 3. Claude Desktop & Cursor (Remote Mode)
-
 Add to `claude_desktop_config.json` or `.cursor/mcp.json`:
-
 ```json
 {
   "mcpServers": {
@@ -88,11 +95,10 @@ Add to `claude_desktop_config.json` or `.cursor/mcp.json`:
 | Parameter | Type | Required | Description |
 |---|---|---|---|
 | `rt` / `nauk_rt` | string | **Yes** | Your `nauk_rt` refresh cookie from naukri.com. |
-| `resume` | string | *Optional* | Public HTTP/HTTPS URL to your candidate `master_resume.json`. |
-| `pdf` | string | *Optional* | Public HTTP/HTTPS URL to download your tailored resume PDF for 1-click uploads. |
+| `resume` | string | *Optional* | Public HTTP/HTTPS URL to candidate `master_resume.json`. |
+| `pdf` | string | *Optional* | Public HTTP/HTTPS URL to download tailored resume PDF for 1-click uploads. |
 
 #### Custom HTTP Headers (Alternative):
-If your MCP client supports custom headers:
 - `X-Naukri-RT`: `YOUR_NAUK_RT_COOKIE`
 - `X-Master-Resume`: `https://example.com/master_resume.json`
 - `X-Resume-Pdf`: `https://example.com/resume.pdf`
@@ -100,7 +106,6 @@ If your MCP client supports custom headers:
 ---
 
 ### How to Get Your `nauk_rt` Cookie in 30 Seconds
-
 1. Log in to [naukri.com](https://www.naukri.com) in your browser.
 2. Open Developer Tools (`F12` or `Cmd+Option+I` on macOS).
 3. Navigate to **Application** (Chrome/Edge) or **Storage** (Firefox) &rarr; **Cookies** &rarr; `https://www.naukri.com`.
@@ -112,9 +117,6 @@ If your MCP client supports custom headers:
 ---
 
 ### 4. Local stdio Mode (Single Developer / CLI)
-
-For local development without Docker:
-
 ```bash
 git clone https://github.com/prasadrawas/naukri_mcp.git
 cd naukri_mcp
@@ -140,64 +142,6 @@ Add to `claude_desktop_config.json`:
 
 ---
 
-## 🛠️ Available MCP Tools (64 Total)
-
-### Profile & Positioning Tools
-- `get_profile`: Query live sections (`headline`, `summary`, `skills`, `notice`, `career`, `itskills`, `projects`, `educations`, `employments`, `languages`, `personal`, or `all`).
-- `update_headline`: Update resume headline (e.g. `Senior Full Stack Engineer | Python, React`).
-- `update_summary`: Update candidate summary (auto-trimmed to max 1000 characters).
-- `update_key_skills`: Update key skills CSV tags.
-- `update_notice_period`: Update notice period (0 for Serving Notice, 15, 30, 60, 90 days).
-- `update_location`: Update current candidate city using standardized city IDs.
-- `update_career_profile`: Update desired industry, functional area, role, job types, and shifts.
-- `update_job_search_status`: Update active job search status (`actively_looking`, `open_to_offers`, `not_looking`).
-- `touch_profile_pulse`: Touch timestamp without altering profile content to keep "Profile Updated: Today" badge active.
-- `sync_full_profile`: Synchronize entire candidate profile and 18+ projects from master resume facts in one pass.
-
-### Experience, Skills & Education
-- `update_work_experience`: Mutate work history entries (designation, employer, CTC, dates, responsibilities).
-- `update_it_skills`: Update technical IT skills matrix with versions, last used year, and experience.
-- `add_it_skill`: Add an individual IT skill entry.
-- `update_projects`: Sync complete client and personal project portfolios.
-- `add_project`: Add an individual client/personal project.
-- `update_educations`: Sync university and higher education degrees.
-- `update_schools`: Update 10th and 12th schooling records.
-- `update_languages`: Update spoken languages and proficiencies (`read`, `write`, `speak`).
-- `add_language`: Add a single language entry.
-
-### Accomplishments & Additions
-- `update_certifications`: Sync professional certifications (AWS, GCP, CKA, etc.).
-- `update_online_profiles`: Add or update online links (GitHub, LinkedIn, Portfolio).
-- `update_work_samples`: Add or update live application and code samples.
-- `update_publications`: Add or update research papers and tech articles.
-- `update_presentations`: Add or update conference slide decks.
-- `update_patents`: Add or update patent filings.
-- `update_accomplishments`: Multi-section synchronizer for all accomplishment categories.
-
-### Resumes & Photos
-- `download_resume`: Download and read candidate's active PDF resume from Naukri, extracting plain text content and metadata directly into chat.
-- `upload_resume`: Upload PDF resume from local path, download URL, or base64.
-- `delete_resume`: Remove uploaded resume from profile.
-- `upload_photo`: Upload candidate profile photo (JPEG/PNG).
-- `delete_photo`: Remove candidate profile photo.
-
-### Job Search & Applications
-- `search_jobs`: Query job openings with keywords, city, and experience filters.
-- `get_job_details`: Inspect full Job Description (JD), employer facts, and screening questionnaire.
-- `apply_to_job`: Submit application directly (1-click) or with AI-resolved answers array.
-
-### Recruiter Analytics & Communications
-- `get_profile_analytics`: Inspect 30-day recruiter search appearances, profile views, and completeness.
-- `get_recruiter_inbox`: Fetch recruiter messages, interview calls, and unread inquiries.
-- `get_notification_summary`: Check application updates, recruiter views, and shortlist alerts.
-- `get_salary_components`: Inspect breakup of base vs variable CTC.
-- `get_blocked_companies` / `block_company`: Prevent current employers or specific recruiters from viewing profile.
-
-### Deletion Tools (Audited & Safe)
-- `delete_project`, `delete_employment`, `delete_it_skill`, `delete_education`, `delete_school`, `delete_online_profile`, `delete_work_sample`, `delete_publication`, `delete_presentation`, `delete_patent`, `delete_certification`, `delete_language`, `delete_profile_item`.
-
----
-
 ## 📚 MCP Resources
 
 - `naukri://candidate/master-resume`: Authenticated source of truth for candidate facts, skills, and projects.
@@ -206,17 +150,18 @@ Add to `claude_desktop_config.json`:
 - `naukri://analytics/dashboard`: Search appearance counts, profile views, and recruiter trend graphs.
 - `naukri://inbox/recruiter-mails`: Recruiter messages, interview invitations, and status summary.
 - `naukri://taxonomy/versions`: Standardized entity taxonomies for certifications, cities, and languages.
+- `naukri://tools/directory`: Functional directory and schema metadata for the unified 6 MCP tools.
 
 ---
 
-## 🧪 Running Automated Tests
+## 🧪 Testing Matrix (100% Pass Rate)
 
 ```bash
-# Run unit tests
-python -m unittest discover -s tests -p 'test_*.py'
+# Run unit tests across all tools, serializers, and multi-tenant middleware
+python -m unittest discover naukri_mcp/tests
 
-# Run strict type checking with pyrefly
-pyrefly check --preset strict .
+# Run live parameter matrix test against live Naukri CloudGateway endpoints
+python naukri_mcp/tests/test_naukri_live_matrix.py
 ```
 
 ---
